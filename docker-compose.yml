@@ -1,0 +1,82 @@
+# docker-compose.yml
+# This file starts the local infrastructure needed by our microservices.
+# We are running these services locally, but the setup mimics production dependencies.
+
+services:
+  # PostgreSQL is our relational database for persistent service data.
+  postgres:
+    image: postgres:16-alpine
+    container_name: swiftcart-postgres
+    restart: unless-stopped
+    environment:
+      # Default PostgreSQL username for local development.
+      POSTGRES_USER: swiftcart
+      # Default PostgreSQL password for local development.
+      # In production, this must come from a secret manager, not plain text.
+      POSTGRES_PASSWORD: swiftcart_password
+      # Initial database created when the container starts for the first time.
+      POSTGRES_DB: swiftcart
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persists database data even if the container is stopped or recreated.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Checks whether PostgreSQL is ready to accept connections.
+      test: ['CMD-SHELL', 'pg_isready -U swiftcart -d swiftcart']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    # Redis will be used later for caching, rate limiting, and temporary data.
+    image: redis:7-alpine
+    container_name: swiftcart-redis
+    restart: unless-stopped
+    ports:
+      # Exposes Redis on localhost:6379.
+      - "6379:6379"
+    volumes:
+      # Persists Redis data locally.
+      - redis_data:/data
+    healthcheck:
+      # Checks whether Redis responds to ping.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    # RabbitMQ is our message broker for event-driven communication.
+    # The management image includes the browser dashboard on port 15672.
+    image: rabbitmq:3-management-alpine
+    container_name: swiftcart-rabbitmq
+    restart: unless-stopped
+    environment:
+      # Default RabbitMQ username for local development.
+      RABBITMQ_DEFAULT_USER: swiftcart
+
+      # Default RabbitMQ password for local development.
+      # In production, this must come from Kubernetes Secrets or a secret manager.
+      RABBITMQ_DEFAULT_PASS: swiftcart_password
+    ports:
+      # AMQP port used by backend services to publish and consume messages.
+      - "5672:5672"
+
+      # Management UI port. Open http://localhost:15672 in your browser.
+      - "15672:15672"
+    volumes:
+      # Persists RabbitMQ queues, exchanges, and messages locally.
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      # Checks whether RabbitMQ is running and responsive.
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  # Named Docker volumes keep data outside the container lifecycle.
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
