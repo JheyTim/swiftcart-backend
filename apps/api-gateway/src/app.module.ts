@@ -7,20 +7,23 @@ import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthProxyService } from './auth/auth-proxy.service';
 import { JwtStrategy } from './auth/jwt.strategy';
+import { ProductsController } from './products/products.controller';
+import { ProductsProxyService } from './products/products-proxy.service';
 import { ProfileController } from './profile.controller';
 
 // Root module for the API Gateway.
 @Module({
   imports: [
-    // Loads .env variables for the API Gateway.
+    
+    // Loads .env variables
     ConfigModule.forRoot({
       isGlobal: true,
     }),
 
-    // Enables API Gateway to make HTTP calls to internal services.
+    // Allows the gateway to call internal services over HTTP.
     HttpModule,
 
-    // Enables Passport authentication strategies and guards.
+    // Enables Passport JWT validation.
     PassportModule,
   ],
   controllers: [
@@ -32,15 +35,10 @@ import { ProfileController } from './profile.controller';
 
     // Protected route example.
     ProfileController,
-  ],
-  providers: [
-    AppService,
 
-    // Handles API Gateway -> Auth Service forwarding.
-    AuthProxyService,
-
-    // Validates JWT bearer tokens at the gateway.
-    JwtStrategy,
+    // Product Controller
+    ProductsController,
   ],
+  providers: [AppService, AuthProxyService, ProductsProxyService, JwtStrategy],
 })
 export class AppModule {}
