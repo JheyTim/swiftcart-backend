@@ -1,3 +1,8 @@
+import {
+  EventNames,
+  ProductCreatedEvent,
+  RabbitMqPublisher,
+} from '@app/common';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,6 +30,9 @@ export class ProductsService {
 
     // ConfigService reads values from .env.
     private readonly configService: ConfigService,
+
+    // Publisher used to emit domain events after successful product writes.
+    private readonly rabbitMqPublisher: RabbitMqPublisher,
   ) {}
 
   // Creates a product and clears product caches.
@@ -32,11 +40,26 @@ export class ProductsService {
     // Create a Product entity instance from validated input.
     const product = this.productsRepository.create(createProductDto);
 
-    // Save the product to PostgreSQL.
+    // Save the product to PostgreSQL first.
+    // We publish the event only after the database write succeeds.
     const savedProduct = await this.productsRepository.save(product);
 
     // Product list is now stale, so remove cached list data.
     await this.invalidateProductCaches(savedProduct.id);
+
+    // Build the event payload using only the fields other services need.
+    const eventPayload: ProductCreatedEvent = {
+      productId: savedProduct.id,
+      name: savedProduct.name,
+      priceCents: savedProduct.priceCents,
+      createdAt: savedProduct.createdAt.toISOString(),
+    };
+
+    // Publish product.created so other services can react asynchronously.
+    await this.rabbitMqPublisher.publish(
+      EventNames.ProductCreated,
+      eventPayload,
+    );
 
     return savedProduct;
   }

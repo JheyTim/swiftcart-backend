@@ -1,3 +1,4 @@
+import { RabbitMqModule } from '@app/common';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RedisModule } from '../redis/redis.module';
@@ -13,6 +14,10 @@ import { ProductsService } from './products.service';
 
     // Provides Redis client for caching product reads.
     RedisModule,
+
+    // Provides RabbitMQ publishing capability to this app.
+
+    RabbitMqModule,
   ],
   controllers: [ProductsController],
   providers: [ProductsService],

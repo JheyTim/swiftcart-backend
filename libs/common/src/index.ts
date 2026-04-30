@@ -1,2 +1,4 @@
-export * from './common.module';
-export * from './common.service';
+// Public exports for the common library.
+// Apps should import shared code from this library instead of duplicating contracts.
+export * from './events';
+export * from './rabbitmq';
