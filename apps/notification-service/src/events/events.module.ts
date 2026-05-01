@@ -1,14 +1,12 @@
 import { RabbitMqModule } from '@app/common';
-
 import { Module } from '@nestjs/common';
+import { OrderCreatedConsumer } from './order-created.consumer';
 import { ProductCreatedConsumer } from './product-created.consumer';
 
 // EventsModule groups all RabbitMQ consumers for the Notification Service.
 @Module({
-  imports: [
-    // Provides RabbitMQ connection/channel so this service can consume events.
-    RabbitMqModule,
-  ],
-  providers: [ProductCreatedConsumer],
+  // Provides RabbitMQ connection/channel so this service can consume events.
+  imports: [RabbitMqModule],
+  providers: [ProductCreatedConsumer, OrderCreatedConsumer],
 })
 export class EventsModule {}

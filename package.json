@@ -18,6 +18,8 @@
     "start:product-service:dev": "nest start product-service --watch",
     "start:notification-service": "nest start notification-service",
     "start:notification-service:dev": "nest start notification-service --watch",
+    "start:order-service": "nest start order-service",
+    "start:order-service:dev": "nest start order-service --watch",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",

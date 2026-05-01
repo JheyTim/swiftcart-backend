@@ -1,0 +1,98 @@
+import { EventNames, OrderCreatedEvent, RabbitMqPublisher } from '@app/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderStatus } from './enums/order-status.enum';
+import { OrderItem } from './order-item.entity';
+import { Order } from './order.entity';
+
+// OrdersService contains order business logic.
+@Injectable()
+export class OrdersService {
+  constructor(
+    // Repository for the orders table.
+    @InjectRepository(Order)
+    private readonly ordersRepository: Repository<Order>,
+
+    // Repository for order_items table.
+    @InjectRepository(OrderItem)
+    private readonly orderItemsRepository: Repository<OrderItem>,
+
+    // Shared RabbitMQ publisher from libs/common.
+    private readonly rabbitMqPublisher: RabbitMqPublisher,
+  ) {}
+
+  // Creates a new order for the authenticated user.
+  async create(userId: string, createOrderDto: CreateOrderDto) {
+    // Calculate the order total from item snapshots.
+    // Formula: total = sum(unit price * quantity)
+    const totalPriceCents = createOrderDto.items.reduce((sum, item) => {
+      return sum + item.unitPriceCents * item.quantity;
+    }, 0);
+
+    // Convert DTO items into OrderItem entities.
+    const orderItems = createOrderDto.items.map((item) =>
+      this.orderItemsRepository.create({
+        productId: item.productId,
+        productName: item.productName,
+        unitPriceCents: item.unitPriceCents,
+        quantity: item.quantity,
+      }),
+    );
+
+    // Create the parent Order entity.
+    const order = this.ordersRepository.create({
+      userId,
+      status: OrderStatus.Pending,
+      totalPriceCents,
+      items: orderItems,
+    });
+
+    // Save order and items to PostgreSQL.
+    // Because Order.items uses cascade=true, items are saved with the order.
+    const savedOrder = await this.ordersRepository.save(order);
+
+    // Build event payload for downstream services.
+    const eventPayload: OrderCreatedEvent = {
+      orderId: savedOrder.id,
+      userId: savedOrder.userId,
+      totalPriceCents: savedOrder.totalPriceCents,
+      items: savedOrder.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+      })),
+      createdAt: savedOrder.createdAt.toISOString(),
+    };
+
+    // Publish order.created only after the database write succeeds.
+    await this.rabbitMqPublisher.publish(EventNames.OrderCreated, eventPayload);
+    return savedOrder;
+  }
+
+  // Lists orders for the authenticated user.
+  async findAllForUser(userId: string) {
+    return this.ordersRepository.find({
+      where: { userId },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
+
+  // Reads one order by ID for the authenticated user.
+  async findOneForUser(userId: string, orderId: string) {
+    const order = await this.ordersRepository.findOne({
+      where: {
+        id: orderId,
+        userId,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    return order;
+  }
+}

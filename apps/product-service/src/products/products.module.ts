@@ -16,7 +16,6 @@ import { ProductsService } from './products.service';
     RedisModule,
 
     // Provides RabbitMQ publishing capability to this app.
-
     RabbitMqModule,
   ],
   controllers: [ProductsController],
