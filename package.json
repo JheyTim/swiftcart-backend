@@ -18,6 +18,8 @@
     "start:product-service:dev": "nest start product-service --watch",
     "start:notification-service": "nest start notification-service",
     "start:notification-service:dev": "nest start notification-service --watch",
+    "start:inventory-service": "nest start inventory-service",
+    "start:inventory-service:dev": "nest start inventory-service --watch",
     "start:order-service": "nest start order-service",
     "start:order-service:dev": "nest start order-service --watch",
     "infra:up": "docker compose up -d",

@@ -95,4 +95,36 @@ export class OrdersService {
     }
     return order;
   }
+
+  // Marks an order as inventory reserved.
+  async markInventoryReserved(orderId: string) {
+    const order = await this.ordersRepository.findOne({
+      where: { id: orderId },
+    });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    // Only pending orders should move to inventory reserved.
+    if (order.status !== OrderStatus.Pending) {
+      return order;
+    }
+    order.status = OrderStatus.InventoryReserved;
+    return this.ordersRepository.save(order);
+  }
+  // Cancels an order because inventory reservation failed.
+  async cancelForInventoryFailure(orderId: string) {
+    const order = await this.ordersRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    // Only pending orders should be cancelled by inventory failure.
+    if (order.status !== OrderStatus.Pending) {
+      return order;
+    }
+    order.status = OrderStatus.Cancelled;
+    return this.ordersRepository.save(order);
+  }
 }

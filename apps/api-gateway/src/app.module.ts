@@ -7,6 +7,8 @@ import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthProxyService } from './auth/auth-proxy.service';
 import { JwtStrategy } from './auth/jwt.strategy';
+import { InventoryController } from './inventory/inventory.controller';
+import { InventoryProxyService } from './inventory/inventory-proxy.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersProxyService } from './orders/orders-proxy.service';
 import { ProductsController } from './products/products.controller';
@@ -28,12 +30,14 @@ import { ProfileController } from './profile.controller';
     ProfileController,
     ProductsController,
     OrdersController,
+    InventoryController,
   ],
   providers: [
     AppService,
     AuthProxyService,
     ProductsProxyService,
     OrdersProxyService,
+    InventoryProxyService,
     JwtStrategy,
   ],
 })

@@ -2,8 +2,6 @@
 // Keeping event names in one shared place avoids typo bugs like 'product.created' vs 'products.created'.
 export const EventNames = {
   ProductCreated: 'product.created',
-
-  // These will be used in later milestones.
   OrderCreated: 'order.created',
   InventoryReserved: 'inventory.reserved',
   InventoryReservationFailed: 'inventory.reservation_failed',

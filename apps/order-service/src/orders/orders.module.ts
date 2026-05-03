@@ -17,5 +17,7 @@ import { OrdersService } from './orders.service';
   ],
   controllers: [OrdersController],
   providers: [OrdersService],
+  // Export OrdersService so event consumers can update order statuses.
+  exports: [OrdersService],
 })
 export class OrdersModule {}
