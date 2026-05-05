@@ -2,3 +2,4 @@
 // Apps should import shared code from this library instead of duplicating contracts.
 export * from './events';
 export * from './rabbitmq';
+export * from './dto';
