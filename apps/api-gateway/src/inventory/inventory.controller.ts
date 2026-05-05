@@ -8,8 +8,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { AddStockDto } from '@app/common';
+import { CreateInventoryItemDto } from '@app/common';
 import { InventoryProxyService } from './inventory-proxy.service';
 
 // This controller exposes inventory management routes from the API Gateway.

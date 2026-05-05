@@ -3,8 +3,8 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from '@app/common';
+import { RegisterDto } from '@app/common';
 
 // This service forwards auth-related requests from the API Gateway to the Auth Service.
 @Injectable()

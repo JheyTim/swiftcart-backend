@@ -3,8 +3,8 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { AddStockDto } from '@app/common';
+import { CreateInventoryItemDto } from '@app/common';
 
 // This service forwards inventory requests from API Gateway to Inventory Service.
 @Injectable()

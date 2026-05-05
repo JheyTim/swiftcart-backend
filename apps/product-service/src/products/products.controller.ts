@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateProductDto } from '@app/common';
+import { UpdateProductDto } from '@app/common';
 import { ProductsService } from './products.service';
 
 // This controller exposes Product Service HTTP routes.

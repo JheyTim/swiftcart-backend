@@ -3,8 +3,8 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateProductDto } from '@app/common';
+import { UpdateProductDto } from '@app/common';
 
 // This service forwards product requests from the API Gateway to Product Service.
 @Injectable()

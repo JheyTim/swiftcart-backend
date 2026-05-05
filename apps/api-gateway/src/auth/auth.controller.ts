@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { AuthProxyService } from './auth-proxy.service';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from '@app/common';
+import { RegisterDto } from '@app/common';
 
 // This controller exposes public auth endpoints from the API Gateway.
 @Controller('auth')

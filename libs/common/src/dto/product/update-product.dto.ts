@@ -7,8 +7,6 @@ import {
   MinLength,
 } from 'class-validator';
 
-// This DTO validates requests for updating products.
-// Every field is optional because PATCH updates only the fields sent by the client.
 export class UpdateProductDto {
   @IsOptional()
   @IsString()

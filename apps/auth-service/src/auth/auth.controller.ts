@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from '@app/common';
+import { RegisterDto } from '@app/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 // This controller exposes HTTP endpoints owned by the Auth Service.

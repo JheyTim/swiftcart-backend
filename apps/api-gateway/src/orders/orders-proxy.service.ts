@@ -3,7 +3,7 @@ import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto } from '@app/common';
 // This service forwards order requests from API Gateway to Order Service.
 @Injectable()
 export class OrdersProxyService {

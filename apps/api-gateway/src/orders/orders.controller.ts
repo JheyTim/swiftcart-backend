@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto } from '@app/common';
 import { OrdersProxyService } from './orders-proxy.service';
 
 // TypeScript helper type for requests that passed JWT authentication.

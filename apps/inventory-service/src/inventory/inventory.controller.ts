@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { AddStockDto } from '@app/common';
+import { CreateInventoryItemDto } from '@app/common';
 import { InventoryService } from './inventory.service';
 
 // This controller exposes Inventory Service HTTP routes.

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto } from '@app/common';
 import { OrdersService } from './orders.service';
 
 // This controller exposes Order Service HTTP routes.

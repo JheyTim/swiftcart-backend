@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { AddStockDto } from '@app/common';
+import { CreateInventoryItemDto } from '@app/common';
 import { InventoryItem } from './inventory-item.entity';
 import { StockReservation } from './stock-reservation.entity';
 
