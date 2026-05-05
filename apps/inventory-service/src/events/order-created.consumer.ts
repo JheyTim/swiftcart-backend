@@ -1,4 +1,11 @@
-import { EventNames, OrderCreatedEvent, RABBITMQ_CHANNEL } from '@app/common';
+import {
+  EventNames,
+  OrderCreatedEvent,
+  RABBITMQ_CHANNEL,
+  DomainEventMessage,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
+} from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
@@ -9,6 +16,7 @@ import { InventoryService } from '../inventory/inventory.service';
 export class OrderCreatedConsumer implements OnModuleInit {
   // Queue name is specific to Inventory Service's order-created handler.
   private readonly queueName = 'inventory.order-created';
+  private deadLetterExchange = '';
 
   constructor(
     @Inject(RABBITMQ_CHANNEL)
@@ -18,20 +26,21 @@ export class OrderCreatedConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
-    // Create queue if it does not already exist.
-    await this.channel.assertQueue(this.queueName, {
-      durable: true,
-    });
-
-    // Bind to order.created events only.
-    await this.channel.bindQueue(
-      this.queueName,
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.OrderCreated,
-    );
+      routingKey: EventNames.OrderCreated,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     // Consume with manual acknowledgement.
     await this.channel.consume(
@@ -49,13 +58,9 @@ export class OrderCreatedConsumer implements OnModuleInit {
     }
 
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        eventName: string;
-        payload: OrderCreatedEvent;
-        metadata: {
-          occurredAt: string;
-        };
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<OrderCreatedEvent>;
 
       // Delegate business logic to InventoryService.
       await this.inventoryService.reserveStockForOrder(parsedMessage.payload);
@@ -67,8 +72,15 @@ export class OrderCreatedConsumer implements OnModuleInit {
         'Failed to handle order.created in Inventory Service:',
         error,
       );
+
       // Reject without requeue to avoid infinite retry loops.
-      this.channel.nack(message, false, false);
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.OrderCreated,
+        maxRetries: 3,
+      });
     }
   }
 }

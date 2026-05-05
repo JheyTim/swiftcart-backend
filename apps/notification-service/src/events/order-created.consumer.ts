@@ -1,4 +1,11 @@
-import { EventNames, OrderCreatedEvent, RABBITMQ_CHANNEL } from '@app/common';
+import {
+  DomainEventMessage,
+  EventNames,
+  OrderCreatedEvent,
+  RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
+} from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
@@ -9,6 +16,8 @@ import type { Channel, ConsumeMessage } from 'amqplib';
 export class OrderCreatedConsumer implements OnModuleInit {
   // Queue name is specific to the Notification Service's order-created handler.
   private readonly queueName = 'notification.order-created';
+  private deadLetterExchange = '';
+
   constructor(
     @Inject(RABBITMQ_CHANNEL)
     private readonly channel: Channel,
@@ -16,20 +25,21 @@ export class OrderCreatedConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
-    // Create the queue if it does not exist.
-    await this.channel.assertQueue(this.queueName, {
-      durable: true,
-    });
-
-    // Bind this queue to order.created events only.
-    await this.channel.bindQueue(
-      this.queueName,
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.OrderCreated,
-    );
+      routingKey: EventNames.OrderCreated,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     // Start consuming messages with manual acknowledgement.
     await this.channel.consume(
@@ -40,7 +50,9 @@ export class OrderCreatedConsumer implements OnModuleInit {
       },
     );
 
-    console.log(`Listening for ${EventNames.OrderCreated} on queue ${this.queueName}`);
+    console.log(
+      `Listening for ${EventNames.OrderCreated} on queue ${this.queueName}`,
+    );
   }
 
   private async handleMessage(message: ConsumeMessage | null) {
@@ -48,13 +60,9 @@ export class OrderCreatedConsumer implements OnModuleInit {
       return;
     }
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        eventName: string;
-        payload: OrderCreatedEvent;
-        metadata: {
-          occurredAt: string;
-        };
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<OrderCreatedEvent>;
 
       // Simulate sending an order confirmation notification.
       console.log('Notification Service received order.created event:', {
@@ -70,8 +78,14 @@ export class OrderCreatedConsumer implements OnModuleInit {
     } catch (error) {
       console.error('Failed to process order.created event:', error);
 
-      // Reject without requeue to avoid infinite retry loops for bad messages.
-      this.channel.nack(message, false, false);
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.OrderCreated,
+        maxRetries: 3,
+      });
     }
   }
 }

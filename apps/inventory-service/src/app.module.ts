@@ -1,10 +1,16 @@
-import { Module } from '@nestjs/common';
+import {
+  CorrelationIdMiddleware,
+  RequestLoggingMiddleware,
+  envValidationSchema,
+} from '@app/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from './events/events.module';
 import { InventoryItem } from './inventory/inventory-item.entity';
 import { InventoryModule } from './inventory/inventory.module';
 import { StockReservation } from './inventory/stock-reservation.entity';
+import { HealthModule } from './health/health.module';
 
 // Root module for the Inventory Service.
 @Module({
@@ -12,6 +18,7 @@ import { StockReservation } from './inventory/stock-reservation.entity';
     // Loads .env variables.
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: envValidationSchema,
     }),
     // Connects Inventory Service to PostgreSQL.
     TypeOrmModule.forRootAsync({
@@ -34,6 +41,15 @@ import { StockReservation } from './inventory/stock-reservation.entity';
     InventoryModule,
     // RabbitMQ consumers.
     EventsModule,
+
+    HealthModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Middleware runs before controllers.
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware, RequestLoggingMiddleware)
+      .forRoutes('*');
+  }
+}

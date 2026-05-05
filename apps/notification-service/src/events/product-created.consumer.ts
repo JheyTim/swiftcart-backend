@@ -1,4 +1,11 @@
-import { EventNames, ProductCreatedEvent, RABBITMQ_CHANNEL } from '@app/common';
+import {
+  DomainEventMessage,
+  EventNames,
+  ProductCreatedEvent,
+  RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
+} from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
@@ -9,6 +16,7 @@ import type { Channel, ConsumeMessage } from 'amqplib';
 export class ProductCreatedConsumer implements OnModuleInit {
   // Queue name is specific to this consumer/service.
   private readonly queueName = 'notification.product-created';
+  private deadLetterExchange = '';
 
   constructor(
     // Use the shared RabbitMQ channel from the common RabbitMqModule.
@@ -21,18 +29,32 @@ export class ProductCreatedConsumer implements OnModuleInit {
   // onModuleInit runs when the NestJS module starts.
   async onModuleInit() {
     const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
     // Assert the queue so RabbitMQ creates it if it does not exist.
     // durable=true keeps the queue after RabbitMQ restarts.
-    await this.channel.assertQueue(this.queueName, { durable: true });
+    // await this.channel.assertQueue(this.queueName, { durable: true });
 
     // Bind the queue to the exchange using the product.created routing key.
     // This means this queue receives product.created events only.
-    await this.channel.bindQueue(
-      this.queueName,
+    // await this.channel.bindQueue(
+    //   this.queueName,
+    //   exchange,
+    //   EventNames.ProductCreated,
+    // );
+
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.ProductCreated,
-    );
+      routingKey: EventNames.ProductCreated,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     // Consume messages from the queue.
     // noAck=false means we manually acknowledge after successful processing.
@@ -57,13 +79,9 @@ export class ProductCreatedConsumer implements OnModuleInit {
 
     try {
       // Convert the message body from bytes to an object.
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        eventName: string;
-        payload: ProductCreatedEvent;
-        metadata: {
-          occurredAt: string;
-        };
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<ProductCreatedEvent>;
 
       // Simulate notification behavior with a log.
       // Later, this can become email, SMS, push notifications, or webhooks.
@@ -82,7 +100,16 @@ export class ProductCreatedConsumer implements OnModuleInit {
       // Reject the message.
       // requeue=false prevents an infinite retry loop for poison messages.
       // Later, we will route failed messages to a dead-letter queue.
-      this.channel.nack(message, false, false);
+      // this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.ProductCreated,
+        maxRetries: 3,
+      });
     }
   }
 }

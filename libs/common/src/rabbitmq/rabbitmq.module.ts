@@ -32,12 +32,30 @@ import { RabbitMqPublisher } from './rabbitmq-publisher.service';
       ) => {
         const exchange = configService.get<string>('RABBITMQ_EXCHANGE') || '';
 
+        const deadLetterExchange =
+          configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') ??
+          'swiftcart.dead-letter';
+
+        const retryExchange =
+          configService.get<string>('RABBITMQ_RETRY_EXCHANGE') ??
+          'swiftcart.retry';
+
         // Create a channel. Most RabbitMQ operations happen on channels.
         const channel = await connection.createChannel();
 
         // Create the shared topic exchange if it does not already exist.
         // durable=true keeps the exchange after RabbitMQ restarts.
         await channel.assertExchange(exchange, 'topic', {
+          durable: true,
+        });
+
+        // Dead-letter exchange receives messages that cannot be processed.
+        await channel.assertExchange(deadLetterExchange, 'topic', {
+          durable: true,
+        });
+
+        // Retry exchange receives messages that should be retried after a delay.
+        await channel.assertExchange(retryExchange, 'topic', {
           durable: true,
         });
 

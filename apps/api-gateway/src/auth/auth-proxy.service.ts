@@ -1,3 +1,4 @@
+import { CORRELATION_ID_HEADER } from '@app/common';
 import { HttpService } from '@nestjs/axios';
 import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,23 +16,34 @@ export class AuthProxyService {
   ) {}
 
   // Forward registration to the Auth Service.
-  async register(registerDto: RegisterDto) {
-    return this.forwardRequest('/auth/register', registerDto);
+  async register(registerDto: RegisterDto, correlationId: string) {
+    return this.forwardRequest('/auth/register', registerDto, correlationId);
   }
 
   // Forward login to the Auth Service.
-  async login(loginDto: LoginDto) {
-    return this.forwardRequest('/auth/login', loginDto);
+  async login(loginDto: LoginDto, correlationId: string) {
+    return this.forwardRequest('/auth/login', loginDto, correlationId);
   }
 
   // Shared helper for forwarding POST requests to the Auth Service.
-  private async forwardRequest(path: string, body: unknown) {
+  private async forwardRequest(
+    path: string,
+    body: unknown,
+    correlationId: string,
+  ) {
     const authServiceUrl = this.configService.get<string>('AUTH_SERVICE_URL');
 
     try {
       // HttpService returns an RxJS Observable, so firstValueFrom converts it to a Promise.
       const response = await firstValueFrom(
-        this.httpService.post(`${authServiceUrl}${path}`, body),
+        this.httpService.request({
+          method: 'post',
+          url: `${authServiceUrl}${path}`,
+          data: body,
+          headers: {
+            [CORRELATION_ID_HEADER]: correlationId,
+          },
+        }),
       );
 
       // Return only the response body to the client.

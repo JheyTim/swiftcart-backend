@@ -36,7 +36,7 @@ export class ProductsService {
   ) {}
 
   // Creates a product and clears product caches.
-  async create(createProductDto: CreateProductDto) {
+  async create(createProductDto: CreateProductDto, correlationId: string) {
     // Create a Product entity instance from validated input.
     const product = this.productsRepository.create(createProductDto);
 
@@ -59,6 +59,7 @@ export class ProductsService {
     await this.rabbitMqPublisher.publish(
       EventNames.ProductCreated,
       eventPayload,
+      correlationId,
     );
 
     return savedProduct;

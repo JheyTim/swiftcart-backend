@@ -1,7 +1,10 @@
 import {
+  DomainEventMessage,
   EventNames,
   InventoryReservationFailedEvent,
   RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
 } from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,20 +13,30 @@ import type { Channel, ConsumeMessage } from 'amqplib';
 @Injectable()
 export class InventoryReservationFailedConsumer implements OnModuleInit {
   private readonly queueName = 'notification.inventory-reservation-failed';
+  private deadLetterExchange = '';
+
   constructor(
     @Inject(RABBITMQ_CHANNEL)
     private readonly channel: Channel,
     private readonly configService: ConfigService,
   ) {}
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
-    await this.channel.assertQueue(this.queueName, { durable: true });
-    await this.channel.bindQueue(
-      this.queueName,
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
+
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.InventoryReservationFailed,
-    );
+      routingKey: EventNames.InventoryReservationFailed,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
+
     await this.channel.consume(
       this.queueName,
       (message) => this.handleMessage(message),
@@ -37,9 +50,10 @@ export class InventoryReservationFailedConsumer implements OnModuleInit {
       return;
     }
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        payload: InventoryReservationFailedEvent;
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<InventoryReservationFailedEvent>;
+
       console.log(
         'Notification Service received inventory.reservation_failed event:',
         {
@@ -54,7 +68,15 @@ export class InventoryReservationFailedConsumer implements OnModuleInit {
         'Failed to process inventory.reservation_failed notification:',
         error,
       );
-      this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.InventoryReservationFailed,
+        maxRetries: 3,
+      });
     }
   }
 }

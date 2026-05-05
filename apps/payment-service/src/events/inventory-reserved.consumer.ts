@@ -1,7 +1,10 @@
 import {
+  DomainEventMessage,
   EventNames,
   InventoryReservedEvent,
   RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
 } from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +15,7 @@ import { PaymentsService } from '../payments/payments.service';
 export class InventoryReservedConsumer implements OnModuleInit {
   // Queue name is specific to Payment Service's inventory-reserved handler.
   private readonly queueName = 'payment.inventory-reserved';
+  private deadLetterExchange = '';
 
   constructor(
     @Inject(RABBITMQ_CHANNEL)
@@ -21,17 +25,21 @@ export class InventoryReservedConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
-    // Create durable queue if it does not exist.
-    await this.channel.assertQueue(this.queueName, { durable: true });
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
-    // Bind to inventory.reserved events only.
-    await this.channel.bindQueue(
-      this.queueName,
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.InventoryReserved,
-    );
+      routingKey: EventNames.InventoryReserved,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     // Consume with manual acknowledgement.
     await this.channel.consume(
@@ -49,11 +57,9 @@ export class InventoryReservedConsumer implements OnModuleInit {
     }
 
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        eventName: string;
-        payload: InventoryReservedEvent;
-        metadata: { occurredAt: string };
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<InventoryReservedEvent>;
 
       // Delegate payment business logic to PaymentsService.
       await this.paymentsService.processPaymentForReservedInventory(
@@ -67,7 +73,15 @@ export class InventoryReservedConsumer implements OnModuleInit {
         'Failed to process inventory.reserved in Payment Service:',
         error,
       );
-      this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.InventoryReserved,
+        maxRetries: 3,
+      });
     }
   }
 }

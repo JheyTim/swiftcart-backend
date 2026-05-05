@@ -1,3 +1,4 @@
+import { CORRELATION_ID_HEADER } from '@app/common';
 import { HttpService } from '@nestjs/axios';
 import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,18 +14,33 @@ export class OrdersProxyService {
   ) {}
 
   // Forward order creation and include the authenticated user ID as an internal header.
-  create(userId: string, createOrderDto: CreateOrderDto) {
-    return this.forwardRequest('post', '/orders', userId, createOrderDto);
+  create(
+    userId: string,
+    correlationId: string,
+    createOrderDto: CreateOrderDto,
+  ) {
+    return this.forwardRequest(
+      'post',
+      '/orders',
+      userId,
+      correlationId,
+      createOrderDto,
+    );
   }
 
   // Forward list orders request.
-  findAll(userId: string) {
-    return this.forwardRequest('get', '/orders', userId);
+  findAll(userId: string, correlationId: string) {
+    return this.forwardRequest('get', '/orders', userId, correlationId);
   }
 
   // Forward get one order request.
-  findOne(userId: string, orderId: string) {
-    return this.forwardRequest('get', `/orders/${orderId}`, userId);
+  findOne(userId: string, correlationId: string, orderId: string) {
+    return this.forwardRequest(
+      'get',
+      `/orders/${orderId}`,
+      userId,
+      correlationId,
+    );
   }
 
   // Shared helper for forwarding requests to Order Service.
@@ -32,22 +48,25 @@ export class OrdersProxyService {
     method: 'get' | 'post',
     path: string,
     userId: string,
+    correlationId: string,
     body?: unknown,
   ) {
     const orderServiceUrl = this.configService.get<string>('ORDER_SERVICE_URL');
+
     try {
+      // HttpService returns an RxJS Observable, so firstValueFrom converts it to a Promise.
       const response = await firstValueFrom(
         this.httpService.request({
           method,
           url: `${orderServiceUrl}${path}`,
           data: body,
           headers: {
-            // Internal header used by Order Service to know who owns the order.
-            // In production, internal services should only accept this from trusted gateway traffic.
+            [CORRELATION_ID_HEADER]: correlationId,
             'x-user-id': userId,
           },
         }),
       );
+
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<any>;

@@ -24,7 +24,11 @@ export class OrdersService {
   ) {}
 
   // Creates a new order for the authenticated user.
-  async create(userId: string, createOrderDto: CreateOrderDto) {
+  async create(
+    userId: string,
+    createOrderDto: CreateOrderDto,
+    correlationId: string,
+  ) {
     // Calculate the order total from item snapshots.
     // Formula: total = sum(unit price * quantity)
     const totalPriceCents = createOrderDto.items.reduce((sum, item) => {
@@ -67,7 +71,11 @@ export class OrdersService {
     };
 
     // Publish order.created only after the database write succeeds.
-    await this.rabbitMqPublisher.publish(EventNames.OrderCreated, eventPayload);
+    await this.rabbitMqPublisher.publish(
+      EventNames.OrderCreated,
+      eventPayload,
+      correlationId,
+    );
     return savedOrder;
   }
 

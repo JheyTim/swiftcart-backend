@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import type { RequestWithCorrelationId } from '@app/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
 import { AuthProxyService } from './auth-proxy.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -10,13 +11,16 @@ export class AuthController {
 
   // Client calls API Gateway, then API Gateway forwards to Auth Service.
   @Post('register')
-  register(@Body() registerDto: RegisterDto) {
-    return this.authProxyService.register(registerDto);
+  register(
+    @Req() request: RequestWithCorrelationId,
+    @Body() registerDto: RegisterDto,
+  ) {
+    return this.authProxyService.register(registerDto, request.correlationId);
   }
 
   // Client receives a JWT from this endpoint after successful login.
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
-    return this.authProxyService.login(loginDto);
+  login(@Req() request: RequestWithCorrelationId, @Body() loginDto: LoginDto) {
+    return this.authProxyService.login(loginDto, request.correlationId);
   }
 }

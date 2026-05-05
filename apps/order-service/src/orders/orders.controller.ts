@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrdersService } from './orders.service';
+import { CORRELATION_ID_HEADER } from '@app/common';
 
 // This controller exposes Order Service HTTP routes.
 // API Gateway calls these routes after validating the user's JWT.
@@ -11,20 +12,28 @@ export class OrdersController {
   @Post()
   create(
     @Headers('x-user-id') userId: string,
+    @Headers(CORRELATION_ID_HEADER) correlationId: string,
     @Body() createOrderDto: CreateOrderDto,
   ) {
-    return this.ordersService.create(userId, createOrderDto);
+    return this.ordersService.create(userId, createOrderDto, correlationId);
   }
 
   // Lists orders owned by the authenticated user.
   @Get()
-  findAll(@Headers('x-user-id') userId: string) {
+  findAll(
+    @Headers('x-user-id') userId: string,
+    @Headers(CORRELATION_ID_HEADER) correlationId: string,
+  ) {
     return this.ordersService.findAllForUser(userId);
   }
 
   // Gets one order owned by the authenticated user.
   @Get(':id')
-  findOne(@Headers('x-user-id') userId: string, @Param('id') id: string) {
+  findOne(
+    @Headers('x-user-id') userId: string,
+    @Headers(CORRELATION_ID_HEADER) correlationId: string,
+    @Param('id') id: string,
+  ) {
     return this.ordersService.findOneForUser(userId, id);
   }
 }

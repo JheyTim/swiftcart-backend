@@ -1,7 +1,10 @@
 import {
+  DomainEventMessage,
   EventNames,
   InventoryReservedEvent,
   RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
 } from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +14,8 @@ import { OrdersService } from '../orders/orders.service';
 @Injectable()
 export class InventoryReservedConsumer implements OnModuleInit {
   private readonly queueName = 'order.inventory-reserved';
+  private deadLetterExchange = '';
+
   constructor(
     @Inject(RABBITMQ_CHANNEL)
     private readonly channel: Channel,
@@ -18,19 +23,28 @@ export class InventoryReservedConsumer implements OnModuleInit {
     private readonly ordersService: OrdersService,
   ) {}
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
-    await this.channel.assertQueue(this.queueName, { durable: true });
-    await this.channel.bindQueue(
-      this.queueName,
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
+
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.InventoryReserved,
-    );
+      routingKey: EventNames.InventoryReserved,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
+
     await this.channel.consume(
       this.queueName,
       (message) => this.handleMessage(message),
       { noAck: false },
     );
+
     console.log(`Order Service listening for ${EventNames.InventoryReserved}`);
   }
   private async handleMessage(message: ConsumeMessage | null) {
@@ -38,18 +52,26 @@ export class InventoryReservedConsumer implements OnModuleInit {
       return;
     }
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        eventName: string;
-        payload: InventoryReservedEvent;
-        metadata: { occurredAt: string };
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<InventoryReservedEvent>;
+
       await this.ordersService.markInventoryReserved(
         parsedMessage.payload.orderId,
       );
+
       this.channel.ack(message);
     } catch (error) {
       console.error('Failed to handle inventory.reserved:', error);
-      this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.InventoryReserved,
+        maxRetries: 3,
+      });
     }
   }
 }

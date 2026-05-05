@@ -1,7 +1,10 @@
 import {
+  DomainEventMessage,
   EventNames,
   PaymentSucceededEvent,
   RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
 } from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +14,7 @@ import { OrdersService } from '../orders/orders.service';
 @Injectable()
 export class PaymentSucceededConsumer implements OnModuleInit {
   private readonly queueName = 'order.payment-succeeded';
+  private deadLetterExchange = '';
 
   constructor(
     @Inject(RABBITMQ_CHANNEL)
@@ -20,16 +24,21 @@ export class PaymentSucceededConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
-    await this.channel.assertQueue(this.queueName, { durable: true });
-
-    await this.channel.bindQueue(
-      this.queueName,
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.PaymentSucceeded,
-    );
+      routingKey: EventNames.PaymentSucceeded,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     await this.channel.consume(
       this.queueName,
@@ -46,16 +55,24 @@ export class PaymentSucceededConsumer implements OnModuleInit {
     }
 
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        payload: PaymentSucceededEvent;
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<PaymentSucceededEvent>;
 
       await this.ordersService.markPaid(parsedMessage.payload.orderId);
-      
+
       this.channel.ack(message);
     } catch (error) {
       console.error('Failed to handle payment.succeeded:', error);
-      this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.PaymentSucceeded,
+        maxRetries: 3,
+      });
     }
   }
 }

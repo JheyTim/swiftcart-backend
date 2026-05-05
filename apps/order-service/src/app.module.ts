@@ -1,10 +1,16 @@
-import { Module } from '@nestjs/common';
+import {
+  CorrelationIdMiddleware,
+  RequestLoggingMiddleware,
+  envValidationSchema,
+} from '@app/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from './events/events.module';
 import { OrderItem } from './orders/order-item.entity';
 import { Order } from './orders/order.entity';
 import { OrdersModule } from './orders/orders.module';
+import { HealthModule } from './health/health.module';
 
 // Root module for the Order Service.
 @Module({
@@ -12,6 +18,7 @@ import { OrdersModule } from './orders/orders.module';
     // Loads environment variables from .env.
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: envValidationSchema,
     }),
 
     // Connects Order Service to PostgreSQL.
@@ -34,7 +41,15 @@ import { OrdersModule } from './orders/orders.module';
 
     // Order feature module.
     OrdersModule,
-    EventsModule
+    EventsModule,
+    HealthModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Middleware runs before controllers.
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware, RequestLoggingMiddleware)
+      .forRoutes('*');
+  }
+}

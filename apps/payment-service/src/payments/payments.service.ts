@@ -109,8 +109,8 @@ export class PaymentsService {
 
   // Decides whether the simulated payment should pass or fail.
   private shouldApprovePayment() {
-    const mode =
-      this.configService.get<string>('PAYMENT_SIMULATION_MODE') ?? 'random';
+    const mode = this.configService.get<string>('PAYMENT_SIMULATION_MODE');
+
     if (mode === 'always_success') {
       return true;
     }

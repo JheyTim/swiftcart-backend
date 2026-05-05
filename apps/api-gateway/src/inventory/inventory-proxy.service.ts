@@ -1,3 +1,4 @@
+import { CORRELATION_ID_HEADER } from '@app/common';
 import { HttpService } from '@nestjs/axios';
 import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,22 +14,32 @@ export class InventoryProxyService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {}
-  create(createDto: CreateInventoryItemDto) {
-    return this.forwardRequest('post', '/inventory/items', createDto);
+  create(createDto: CreateInventoryItemDto, correlationId: string) {
+    return this.forwardRequest(
+      'post',
+      '/inventory/items',
+      correlationId,
+      createDto,
+    );
   }
 
-  findAll() {
-    return this.forwardRequest('get', '/inventory/items');
+  findAll(correlationId: string) {
+    return this.forwardRequest('get', '/inventory/items', correlationId);
   }
 
-  findByProductId(productId: string) {
-    return this.forwardRequest('get', `/inventory/items/${productId}`);
+  findByProductId(productId: string, correlationId: string) {
+    return this.forwardRequest(
+      'get',
+      `/inventory/items/${productId}`,
+      correlationId,
+    );
   }
 
-  addStock(productId: string, addStockDto: AddStockDto) {
+  addStock(productId: string, addStockDto: AddStockDto, correlationId: string) {
     return this.forwardRequest(
       'patch',
       `/inventory/items/${productId}/add-stock`,
+      correlationId,
       addStockDto,
     );
   }
@@ -36,17 +47,22 @@ export class InventoryProxyService {
   private async forwardRequest(
     method: 'get' | 'post' | 'patch',
     path: string,
+    correlationId: string,
     body?: unknown,
   ) {
     const inventoryServiceUrl = this.configService.get<string>(
       'INVENTORY_SERVICE_URL',
     );
     try {
+      // HttpService returns an RxJS Observable, so firstValueFrom converts it to a Promise.
       const response = await firstValueFrom(
         this.httpService.request({
           method,
           url: `${inventoryServiceUrl}${path}`,
           data: body,
+          headers: {
+            [CORRELATION_ID_HEADER]: correlationId,
+          },
         }),
       );
       return response.data;

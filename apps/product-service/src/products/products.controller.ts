@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Headers,
+} from '@nestjs/common';
+import { CORRELATION_ID_HEADER } from '@app/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
@@ -11,8 +20,11 @@ export class ProductsController {
 
   // Creates a product.
   @Post()
-  create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  create(
+    @Headers(CORRELATION_ID_HEADER) correlationId: string,
+    @Body() createProductDto: CreateProductDto,
+  ) {
+    return this.productsService.create(createProductDto, correlationId);
   }
 
   // Lists all products.

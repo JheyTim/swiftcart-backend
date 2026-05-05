@@ -1,4 +1,11 @@
-import { EventNames, PaymentFailedEvent, RABBITMQ_CHANNEL } from '@app/common';
+import {
+  DomainEventMessage,
+  EventNames,
+  PaymentFailedEvent,
+  RABBITMQ_CHANNEL,
+  rejectMessageWithRetry,
+  setupConsumerQueue,
+} from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
@@ -7,23 +14,31 @@ import { InventoryService } from '../inventory/inventory.service';
 @Injectable()
 export class PaymentFailedConsumer implements OnModuleInit {
   private readonly queueName = 'inventory.payment-failed';
+  private deadLetterExchange = '';
+
   constructor(
     @Inject(RABBITMQ_CHANNEL)
     private readonly channel: Channel,
     private readonly configService: ConfigService,
     private readonly inventoryService: InventoryService,
   ) {}
+
   async onModuleInit() {
-    const exchange =
-      this.configService.get<string>('RABBITMQ_EXCHANGE') ?? 'swiftcart.events';
+    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
+    this.deadLetterExchange =
+      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
+    const retryExchange =
+      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
 
-    await this.channel.assertQueue(this.queueName, { durable: true });
-
-    await this.channel.bindQueue(
-      this.queueName,
+    await setupConsumerQueue({
+      channel: this.channel,
+      queueName: this.queueName,
       exchange,
-      EventNames.PaymentFailed,
-    );
+      routingKey: EventNames.PaymentFailed,
+      deadLetterExchange: this.deadLetterExchange,
+      retryExchange,
+      retryDelayMs: 5000,
+    });
 
     await this.channel.consume(
       this.queueName,
@@ -40,9 +55,9 @@ export class PaymentFailedConsumer implements OnModuleInit {
     }
 
     try {
-      const parsedMessage = JSON.parse(message.content.toString()) as {
-        payload: PaymentFailedEvent;
-      };
+      const parsedMessage = JSON.parse(
+        message.content.toString(),
+      ) as DomainEventMessage<PaymentFailedEvent>;
 
       await this.inventoryService.releaseReservationForOrder(
         parsedMessage.payload.orderId,
@@ -54,7 +69,15 @@ export class PaymentFailedConsumer implements OnModuleInit {
         'Failed to handle payment.failed in Inventory Service:',
         error,
       );
-      this.channel.nack(message, false, false);
+
+      // Reject without requeue to avoid infinite retry loops.
+      rejectMessageWithRetry({
+        channel: this.channel,
+        message,
+        deadLetterExchange: this.deadLetterExchange,
+        routingKey: EventNames.PaymentFailed,
+        maxRetries: 3,
+      });
     }
   }
 }

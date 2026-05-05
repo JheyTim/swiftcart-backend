@@ -1,9 +1,15 @@
-import { Module } from '@nestjs/common';
+import {
+  CorrelationIdMiddleware,
+  RequestLoggingMiddleware,
+  envValidationSchema,
+} from '@app/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from './events/events.module';
 import { Payment } from './payments/payment.entity';
 import { PaymentsModule } from './payments/payments.module';
+import { HealthModule } from './health/health.module';
 
 // Root module for the Payment Service.
 @Module({
@@ -11,6 +17,7 @@ import { PaymentsModule } from './payments/payments.module';
     // Loads .env variables.
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: envValidationSchema,
     }),
     // Connects Payment Service to PostgreSQL.
     TypeOrmModule.forRootAsync({
@@ -33,8 +40,16 @@ import { PaymentsModule } from './payments/payments.module';
     // Payment HTTP routes and business logic.
     PaymentsModule,
 
-    // RabbitMQ consumers.
     EventsModule,
+
+    HealthModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Middleware runs before controllers.
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware, RequestLoggingMiddleware)
+      .forRoutes('*');
+  }
+}

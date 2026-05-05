@@ -25,6 +25,7 @@ export class RabbitMqPublisher implements OnModuleDestroy {
   async publish<TPayload extends object>(
     eventName: EventName,
     payload: TPayload,
+    correlationId?: string,
   ) {
     const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
 
@@ -35,6 +36,7 @@ export class RabbitMqPublisher implements OnModuleDestroy {
       metadata: {
         // Event timestamp helps with debugging and ordering analysis.
         occurredAt: new Date().toISOString(),
+        correlationId,
       },
     };
 
@@ -46,6 +48,7 @@ export class RabbitMqPublisher implements OnModuleDestroy {
     const accepted = this.channel.publish(exchange, eventName, buffer, {
       contentType: 'application/json',
       persistent: true,
+      correlationId,
     });
 
     // channel.publish returns false when the write buffer is full.

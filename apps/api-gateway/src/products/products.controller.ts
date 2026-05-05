@@ -6,7 +6,9 @@ import {
   Patch,
   Post,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import type { RequestWithCorrelationId } from '@app/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -21,25 +23,39 @@ export class ProductsController {
 
   // Creates a product. Protected by JWT at the controller level.
   @Post()
-  create(@Body() createProductDto: CreateProductDto) {
-    return this.productsProxyService.create(createProductDto);
+  create(
+    @Req() request: RequestWithCorrelationId,
+    @Body() createProductDto: CreateProductDto,
+  ) {
+    return this.productsProxyService.create(
+      createProductDto,
+      request.correlationId,
+    );
   }
 
   // Lists products. Product Service decides whether to read from Redis or PostgreSQL.
   @Get()
-  findAll() {
-    return this.productsProxyService.findAll();
+  findAll(@Req() request: RequestWithCorrelationId) {
+    return this.productsProxyService.findAll(request.correlationId);
   }
 
   // Gets one product by ID.
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.productsProxyService.findOne(id);
+  findOne(@Req() request: RequestWithCorrelationId, @Param('id') id: string) {
+    return this.productsProxyService.findOne(id, request.correlationId);
   }
 
   // Updates one product by ID.
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
-    return this.productsProxyService.update(id, updateProductDto);
+  update(
+    @Req() request: RequestWithCorrelationId,
+    @Param('id') id: string,
+    @Body() updateProductDto: UpdateProductDto,
+  ) {
+    return this.productsProxyService.update(
+      id,
+      updateProductDto,
+      request.correlationId,
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { CORRELATION_ID_HEADER } from '@app/common';
 import { HttpService } from '@nestjs/axios';
 import { HttpException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -14,29 +15,44 @@ export class ProductsProxyService {
     private readonly configService: ConfigService,
   ) {}
   // Forward product creation.
-  create(createProductDto: CreateProductDto) {
-    return this.forwardRequest('post', '/products', createProductDto);
+  create(createProductDto: CreateProductDto, correlationId: string) {
+    return this.forwardRequest(
+      'post',
+      '/products',
+      correlationId,
+      createProductDto,
+    );
   }
 
   // Forward product list request.
-  findAll() {
-    return this.forwardRequest('get', '/products');
+  findAll(correlationId: string) {
+    return this.forwardRequest('get', '/products', correlationId);
   }
 
   // Forward product detail request.
-  findOne(id: string) {
-    return this.forwardRequest('get', `/products/${id}`);
+  findOne(id: string, correlationId: string) {
+    return this.forwardRequest('get', `/products/${id}`, correlationId);
   }
 
   // Forward product update request.
-  update(id: string, updateProductDto: UpdateProductDto) {
-    return this.forwardRequest('patch', `/products/${id}`, updateProductDto);
+  update(
+    id: string,
+    updateProductDto: UpdateProductDto,
+    correlationId: string,
+  ) {
+    return this.forwardRequest(
+      'patch',
+      `/products/${id}`,
+      correlationId,
+      updateProductDto,
+    );
   }
 
   // Shared helper for forwarding requests to Product Service.
   private async forwardRequest(
     method: 'get' | 'post' | 'patch',
     path: string,
+    correlationId: string,
     body?: unknown,
   ) {
     const productServiceUrl = this.configService.get<string>(
@@ -50,6 +66,9 @@ export class ProductsProxyService {
           method,
           url: `${productServiceUrl}${path}`,
           data: body,
+          headers: {
+            [CORRELATION_ID_HEADER]: correlationId,
+          },
         }),
       );
 

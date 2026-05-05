@@ -1,8 +1,14 @@
-import { Module } from '@nestjs/common';
+import {
+  CorrelationIdMiddleware,
+  RequestLoggingMiddleware,
+  envValidationSchema,
+} from '@app/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { User } from './users/user.entity';
+import { HealthModule } from './health/health.module';
 
 // AppModule is the root module for the Auth Service.
 @Module({
@@ -10,6 +16,7 @@ import { User } from './users/user.entity';
     // Loads .env variables and makes ConfigService available everywhere.
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: envValidationSchema,
     }),
 
     // Connects the Auth Service to PostgreSQL through TypeORM.
@@ -33,6 +40,15 @@ import { User } from './users/user.entity';
     }),
     // Authentication feature module.
     AuthModule,
+
+    HealthModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Middleware runs before controllers.
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware, RequestLoggingMiddleware)
+      .forRoutes('*');
+  }
+}

@@ -1,3 +1,4 @@
+import type { RequestWithCorrelationId } from '@app/common';
 import {
   Body,
   Controller,
@@ -6,6 +7,7 @@ import {
   Patch,
   Post,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AddStockDto } from './dto/add-stock.dto';
@@ -20,25 +22,39 @@ import { InventoryProxyService } from './inventory-proxy.service';
 export class InventoryController {
   constructor(private readonly inventoryProxyService: InventoryProxyService) {}
   @Post()
-  create(@Body() createDto: CreateInventoryItemDto) {
-    return this.inventoryProxyService.create(createDto);
+  create(
+    @Req() request: RequestWithCorrelationId,
+    @Body() createDto: CreateInventoryItemDto,
+  ) {
+    return this.inventoryProxyService.create(createDto, request.correlationId);
   }
 
   @Get()
-  findAll() {
-    return this.inventoryProxyService.findAll();
+  findAll(@Req() request: RequestWithCorrelationId) {
+    return this.inventoryProxyService.findAll(request.correlationId);
   }
 
   @Get(':productId')
-  findByProductId(@Param('productId') productId: string) {
-    return this.inventoryProxyService.findByProductId(productId);
+  findByProductId(
+    @Req() request: RequestWithCorrelationId,
+    @Param('productId') productId: string,
+  ) {
+    return this.inventoryProxyService.findByProductId(
+      productId,
+      request.correlationId,
+    );
   }
 
   @Patch(':productId/add-stock')
   addStock(
+    @Req() request: RequestWithCorrelationId,
     @Param('productId') productId: string,
     @Body() addStockDto: AddStockDto,
   ) {
-    return this.inventoryProxyService.addStock(productId, addStockDto);
+    return this.inventoryProxyService.addStock(
+      productId,
+      addStockDto,
+      request.correlationId,
+    );
   }
 }
