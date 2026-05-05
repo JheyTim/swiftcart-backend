@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { InventoryReservationFailedConsumer } from './inventory-reservation-failed.consumer';
 import { InventoryReservedConsumer } from './inventory-reserved.consumer';
 import { OrderCreatedConsumer } from './order-created.consumer';
+import { PaymentFailedConsumer } from './payment-failed.consumer';
+import { PaymentSucceededConsumer } from './payment-succeeded.consumer';
 import { ProductCreatedConsumer } from './product-created.consumer';
 
 // EventsModule groups all RabbitMQ consumers for the Notification Service.
@@ -14,6 +16,8 @@ import { ProductCreatedConsumer } from './product-created.consumer';
     OrderCreatedConsumer,
     InventoryReservedConsumer,
     InventoryReservationFailedConsumer,
+    PaymentSucceededConsumer,
+    PaymentFailedConsumer,
   ],
 })
 export class EventsModule {}

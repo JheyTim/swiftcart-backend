@@ -22,6 +22,8 @@
     "start:inventory-service:dev": "nest start inventory-service --watch",
     "start:order-service": "nest start order-service",
     "start:order-service:dev": "nest start order-service --watch",
+    "start:payment-service": "nest start payment-service",
+    "start:payment-service:dev": "nest start payment-service --watch",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",

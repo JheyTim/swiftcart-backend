@@ -4,3 +4,4 @@ export * from './event-names';
 export * from './product-events';
 export * from './order-events';
 export * from './inventory-events';
+export * from './payment-events';

@@ -183,10 +183,74 @@ export class InventoryService {
       })),
       reservedAt: new Date().toISOString(),
     };
-    
+
     await this.rabbitMqPublisher.publish(
       EventNames.InventoryReserved,
       reservedEvent,
     );
+  }
+
+  // Confirms reserved stock after successful payment.
+  // This means reserved stock becomes permanently sold.
+  async confirmReservationForOrder(orderId: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const reservations = await manager.find(StockReservation, {
+        where: {
+          orderId,
+          status: 'RESERVED',
+        },
+      });
+
+      for (const reservation of reservations) {
+        const inventoryItem = await manager.findOneOrFail(InventoryItem, {
+          where: { productId: reservation.productId },
+        });
+
+        // Reduce reserved quantity because the sale is now confirmed.
+        // availableQuantity was already reduced during reservation.
+        inventoryItem.reservedQuantity -= reservation.quantity;
+        await manager.save(InventoryItem, inventoryItem);
+
+        // Mark reservation as confirmed for auditability.
+        reservation.status = 'CONFIRMED';
+        await manager.save(StockReservation, reservation);
+      }
+      return {
+        orderId,
+        confirmedReservations: reservations.length,
+      };
+    });
+  }
+
+  // Releases reserved stock after payment failure.
+  // This returns stock back to availableQuantity.
+  async releaseReservationForOrder(orderId: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const reservations = await manager.find(StockReservation, {
+        where: {
+          orderId,
+          status: 'RESERVED',
+        },
+      });
+
+      for (const reservation of reservations) {
+        const inventoryItem = await manager.findOneOrFail(InventoryItem, {
+          where: { productId: reservation.productId },
+        });
+
+        // Move stock from reserved back to available.
+        inventoryItem.reservedQuantity -= reservation.quantity;
+        inventoryItem.availableQuantity += reservation.quantity;
+        await manager.save(InventoryItem, inventoryItem);
+
+        // Mark reservation as released for auditability.
+        reservation.status = 'RELEASED';
+        await manager.save(StockReservation, reservation);
+      }
+      return {
+        orderId,
+        releasedReservations: reservations.length,
+      };
+    });
   }
 }

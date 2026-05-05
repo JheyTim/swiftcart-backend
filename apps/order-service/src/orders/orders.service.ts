@@ -127,4 +127,41 @@ export class OrdersService {
     order.status = OrderStatus.Cancelled;
     return this.ordersRepository.save(order);
   }
+
+  // Marks an order as paid after payment succeeds.
+  async markPaid(orderId: string) {
+    const order = await this.ordersRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Only orders with reserved inventory should become paid.
+    if (order.status !== OrderStatus.InventoryReserved) {
+      return order;
+    }
+
+    order.status = OrderStatus.Paid;
+    return this.ordersRepository.save(order);
+  }
+  // Marks an order as payment failed after payment fails.
+  async markPaymentFailed(orderId: string) {
+    const order = await this.ordersRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Only orders with reserved inventory should become payment failed.
+    if (order.status !== OrderStatus.InventoryReserved) {
+      return order;
+    }
+
+    order.status = OrderStatus.PaymentFailed;
+    return this.ordersRepository.save(order);
+  }
 }
