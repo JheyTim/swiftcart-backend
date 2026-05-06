@@ -405,6 +405,98 @@ Shared code lives in `libs/common/src` and should be imported with
 
 ---
 
+## HTTP Endpoints
+
+Most client traffic should go through the API Gateway at
+`http://localhost:3000`. Internal service endpoints are listed for local
+debugging and service-to-service context.
+
+### API Gateway (`localhost:3000`)
+
+| Method  | Path                                    | Auth   | Description                                           |
+| ------- | --------------------------------------- | ------ | ----------------------------------------------------- |
+| `GET`   | `/health`                               | Public | Basic API Gateway health response.                    |
+| `GET`   | `/health/live`                          | Public | Liveness check.                                       |
+| `GET`   | `/health/ready`                         | Public | Readiness check.                                      |
+| `POST`  | `/auth/register`                        | Public | Register a user account.                              |
+| `POST`  | `/auth/login`                           | Public | Log in and receive a JWT.                             |
+| `POST`  | `/products`                             | JWT    | Create a product.                                     |
+| `GET`   | `/products`                             | JWT    | List products.                                        |
+| `GET`   | `/products/:id`                         | JWT    | Get one product by ID.                                |
+| `PATCH` | `/products/:id`                         | JWT    | Update one product by ID.                             |
+| `POST`  | `/inventory/items`                      | JWT    | Create an inventory item for a product.               |
+| `GET`   | `/inventory/items`                      | JWT    | List inventory items.                                 |
+| `GET`   | `/inventory/items/:productId`           | JWT    | Get inventory by product ID.                          |
+| `PATCH` | `/inventory/items/:productId/add-stock` | JWT    | Add stock to a product inventory row.                 |
+| `POST`  | `/orders`                               | JWT    | Create an order for the authenticated user.           |
+| `GET`   | `/orders`                               | JWT    | List orders for the authenticated user.               |
+| `GET`   | `/orders/:id`                           | JWT    | Get one order for the authenticated user.             |
+
+### Auth Service (`localhost:3001`)
+
+| Method | Path             | Auth   | Description                           |
+| ------ | ---------------- | ------ | ------------------------------------- |
+| `GET`  | `/health/live`   | Public | Liveness check.                       |
+| `GET`  | `/health/ready`  | Public | Readiness check.                      |
+| `POST` | `/auth/register` | Public | Register a user account.              |
+| `POST` | `/auth/login`    | Public | Log in and receive a JWT.             |
+| `GET`  | `/auth/me`       | JWT    | Return the authenticated JWT payload. |
+
+### Product Service (`localhost:3002`)
+
+| Method  | Path            | Auth     | Description                                              |
+| ------- | --------------- | -------- | -------------------------------------------------------- |
+| `GET`   | `/health/live`  | Public   | Liveness check.                                          |
+| `GET`   | `/health/ready` | Public   | Readiness check.                                         |
+| `POST`  | `/products`     | Internal | Create a product and publish `product.created`.          |
+| `GET`   | `/products`     | Internal | List products, using Redis cache when available.         |
+| `GET`   | `/products/:id` | Internal | Get one product by ID, using Redis cache when available. |
+| `PATCH` | `/products/:id` | Internal | Update one product and invalidate product caches.        |
+
+### Inventory Service (`localhost:3005`)
+
+| Method  | Path                                    | Auth     | Description                             |
+| ------- | --------------------------------------- | -------- | --------------------------------------- |
+| `GET`   | `/health/live`                          | Public   | Liveness check.                         |
+| `GET`   | `/health/ready`                         | Public   | Readiness check.                        |
+| `POST`  | `/inventory/items`                      | Internal | Create an inventory item for a product. |
+| `GET`   | `/inventory/items`                      | Internal | List inventory items.                   |
+| `GET`   | `/inventory/items/:productId`           | Internal | Get inventory by product ID.            |
+| `PATCH` | `/inventory/items/:productId/add-stock` | Internal | Add stock to a product inventory row.   |
+
+### Order Service (`localhost:3004`)
+
+| Method | Path            | Auth             | Description                                  |
+| ------ | --------------- | ---------------- | -------------------------------------------- |
+| `GET`  | `/health/live`  | Public           | Liveness check.                              |
+| `GET`  | `/health/ready` | Public           | Readiness check.                             |
+| `POST` | `/orders`       | Internal headers | Create an order and publish `order.created`. |
+| `GET`  | `/orders`       | Internal headers | List orders for the forwarded user ID.       |
+| `GET`  | `/orders/:id`   | Internal headers | Get one order for the forwarded user ID.     |
+
+Order Service expects API Gateway to forward `x-user-id` and `x-correlation-id`
+headers.
+
+### Payment Service (`localhost:3006`)
+
+| Method | Path            | Auth           | Description                                          |
+| ------ | --------------- | -------------- | ---------------------------------------------------- |
+| `GET`  | `/health/live`  | Public         | Liveness check.                                      |
+| `GET`  | `/health/ready` | Public         | Readiness check.                                     |
+| `GET`  | `/payments`     | Internal/debug | List payment records for local event-flow debugging. |
+
+### Notification Service (`localhost:3003`)
+
+| Method | Path            | Auth   | Description      |
+| ------ | --------------- | ------ | ---------------- |
+| `GET`  | `/health/live`  | Public | Liveness check.  |
+| `GET`  | `/health/ready` | Public | Readiness check. |
+
+Notification Service primarily consumes RabbitMQ events and does not expose
+domain HTTP routes.
+
+---
+
 ## Useful Scripts
 
 | Command                                  | Description                                     |
