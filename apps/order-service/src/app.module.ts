@@ -2,10 +2,10 @@ import {
   CorrelationIdMiddleware,
   RequestLoggingMiddleware,
   envValidationSchema,
+  createPostgresTypeOrmModule,
 } from '@app/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { EventsModule } from './events/events.module';
 import { OrderItem } from './orders/order-item.entity';
 import { Order } from './orders/order.entity';
@@ -22,26 +22,13 @@ import { HealthModule } from './health/health.module';
     }),
 
     // Connects Order Service to PostgreSQL.
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('POSTGRES_HOST'),
-        port: Number(configService.get<number>('POSTGRES_PORT')),
-        username: configService.get<string>('POSTGRES_USER'),
-        password: configService.get<string>('POSTGRES_PASSWORD'),
-        database: configService.get<string>('POSTGRES_DB'),
-        entities: [Order, OrderItem],
-        // Local learning convenience only.
-        // In production, use migrations instead.
-        synchronize: configService.get<string>('NODE_ENV') === 'development',
-      }),
-    }),
+    createPostgresTypeOrmModule([Order, OrderItem]),
 
     // Order feature module.
     OrdersModule,
+
     EventsModule,
+
     HealthModule,
   ],
 })

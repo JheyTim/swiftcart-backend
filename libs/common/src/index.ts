@@ -4,3 +4,7 @@ export * from './config';
 export * from './events';
 export * from './http';
 export * from './rabbitmq';
+export * from './dto';
+export * from './guards';
+export * from './redis';
+export * from './database';

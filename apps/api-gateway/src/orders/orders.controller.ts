@@ -1,4 +1,5 @@
-import type { RequestWithCorrelationId } from '@app/common';
+import type { RequestWithCorrelationId, CreateOrderDto } from '@app/common';
+import { JwtAuthGuard } from '@app/common';
 import {
   Body,
   Controller,
@@ -8,8 +9,6 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateOrderDto } from './dto/create-order.dto';
 import { OrdersProxyService } from './orders-proxy.service';
 
 // TypeScript helper type for requests that passed JWT authentication.

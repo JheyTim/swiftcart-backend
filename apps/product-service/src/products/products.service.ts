@@ -2,15 +2,15 @@ import {
   EventNames,
   ProductCreatedEvent,
   RabbitMqPublisher,
+  CreateProductDto,
+  UpdateProductDto,
+  REDIS_CLIENT,
 } from '@app/common';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { Repository } from 'typeorm';
-import { REDIS_CLIENT } from '../redis/redis.constants';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './product.entity';
 
 // ProductsService contains business logic for product operations.

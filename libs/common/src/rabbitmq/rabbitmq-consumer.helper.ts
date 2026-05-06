@@ -1,4 +1,7 @@
+import { ConfigService } from '@nestjs/config';
 import { Channel, ConsumeMessage } from 'amqplib';
+import { DomainEventMessage, EventName } from '../events';
+import { getConsumerBrokerConfig } from './consumer-config.helper';
 
 // Options used to configure a RabbitMQ consumer queue.
 export type RabbitMqConsumerOptions = {
@@ -9,6 +12,18 @@ export type RabbitMqConsumerOptions = {
   deadLetterExchange: string;
   retryExchange: string;
   retryDelayMs?: number;
+};
+
+export type ConsumeDomainEventOptions<TPayload extends object> = {
+  channel: Channel;
+  configService: ConfigService;
+  queueName: string;
+  routingKey: EventName;
+  handleEvent: (event: DomainEventMessage<TPayload>) => Promise<void> | void;
+  logMessage: string;
+  errorMessage: string;
+  retryDelayMs?: number;
+  maxRetries?: number;
 };
 
 // Creates a durable queue with retry and dead-letter behavior.
@@ -56,6 +71,62 @@ export async function setupConsumerQueue(options: RabbitMqConsumerOptions) {
     options.routingKey,
   );
 }
+
+export async function consumeDomainEvent<TPayload extends object>(
+  options: ConsumeDomainEventOptions<TPayload>,
+) {
+  const { exchange, deadLetterExchange, retryExchange } =
+    getConsumerBrokerConfig(options.configService);
+
+  await setupConsumerQueue({
+    channel: options.channel,
+    queueName: options.queueName,
+    exchange,
+    routingKey: options.routingKey,
+    deadLetterExchange,
+    retryExchange,
+    retryDelayMs: options.retryDelayMs,
+  });
+
+  await options.channel.consume(
+    options.queueName,
+    (message) => handleDomainEventMessage(message, options, deadLetterExchange),
+    { noAck: false },
+  );
+
+  console.log(options.logMessage);
+}
+
+async function handleDomainEventMessage<TPayload extends object>(
+  message: ConsumeMessage | null,
+  options: ConsumeDomainEventOptions<TPayload>,
+  deadLetterExchange: string,
+) {
+  if (!message) {
+    return;
+  }
+
+  try {
+    const parsedMessage = JSON.parse(
+      message.content.toString(),
+    ) as DomainEventMessage<TPayload>;
+
+    await options.handleEvent(parsedMessage);
+
+    options.channel.ack(message);
+  } catch (error) {
+    console.error(options.errorMessage, error);
+
+    rejectMessageWithRetry({
+      channel: options.channel,
+      message,
+      deadLetterExchange,
+      routingKey: options.routingKey,
+      maxRetries: options.maxRetries,
+    });
+  }
+}
+
 // Sends a failed message either to retry or dead-letter.
 export function rejectMessageWithRetry(options: {
   channel: Channel;

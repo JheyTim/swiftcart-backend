@@ -7,9 +7,11 @@ import {
   Post,
   Headers,
 } from '@nestjs/common';
-import { CORRELATION_ID_HEADER } from '@app/common';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import {
+  CORRELATION_ID_HEADER,
+  CreateProductDto,
+  UpdateProductDto,
+} from '@app/common';
 import { ProductsService } from './products.service';
 
 // This controller exposes Product Service HTTP routes.

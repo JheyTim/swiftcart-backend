@@ -1,20 +1,18 @@
 import {
-  DomainEventMessage,
   EventNames,
   InventoryReservationFailedEvent,
   RABBITMQ_CHANNEL,
-  rejectMessageWithRetry,
-  setupConsumerQueue,
+  consumeDomainEvent,
 } from '@app/common';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Channel, ConsumeMessage } from 'amqplib';
+import type { Channel } from 'amqplib';
 import { OrdersService } from '../orders/orders.service';
+
 // This consumer cancels orders when inventory reservation fails.
 @Injectable()
 export class InventoryReservationFailedConsumer implements OnModuleInit {
   private readonly queueName = 'order.inventory-reservation-failed';
-  private deadLetterExchange = '';
 
   constructor(
     @Inject(RABBITMQ_CHANNEL)
@@ -24,56 +22,18 @@ export class InventoryReservationFailedConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE') || '';
-    this.deadLetterExchange =
-      this.configService.get<string>('RABBITMQ_DEAD_LETTER_EXCHANGE') || '';
-    const retryExchange =
-      this.configService.get<string>('RABBITMQ_RETRY_EXCHANGE') || '';
-
-    await setupConsumerQueue({
+    await consumeDomainEvent<InventoryReservationFailedEvent>({
       channel: this.channel,
+      configService: this.configService,
       queueName: this.queueName,
-      exchange,
       routingKey: EventNames.InventoryReservationFailed,
-      deadLetterExchange: this.deadLetterExchange,
-      retryExchange,
-      retryDelayMs: 5000,
+      logMessage: `Order Service listening for ${EventNames.InventoryReservationFailed}`,
+      errorMessage: 'Failed to handle inventory.reservation_failed:',
+      handleEvent: async (event) => {
+        await this.ordersService.cancelForInventoryFailure(
+          event.payload.orderId,
+        );
+      },
     });
-
-    await this.channel.consume(
-      this.queueName,
-      (message) => this.handleMessage(message),
-      { noAck: false },
-    );
-
-    console.log(
-      `Order Service listening for ${EventNames.InventoryReservationFailed}`,
-    );
-  }
-  private async handleMessage(message: ConsumeMessage | null) {
-    if (!message) {
-      return;
-    }
-    try {
-      const parsedMessage = JSON.parse(
-        message.content.toString(),
-      ) as DomainEventMessage<InventoryReservationFailedEvent>;
-
-      await this.ordersService.cancelForInventoryFailure(
-        parsedMessage.payload.orderId,
-      );
-      this.channel.ack(message);
-    } catch (error) {
-      console.error('Failed to handle inventory.reservation_failed:', error);
-
-      // Reject without requeue to avoid infinite retry loops.
-      rejectMessageWithRetry({
-        channel: this.channel,
-        message,
-        deadLetterExchange: this.deadLetterExchange,
-        routingKey: EventNames.InventoryReservationFailed,
-        maxRetries: 3,
-      });
-    }
   }
 }

@@ -1,10 +1,8 @@
-import { CORRELATION_ID_HEADER } from '@app/common';
+import { forwardHttpRequest, CreateOrderDto } from '@app/common';
 import { HttpService } from '@nestjs/axios';
-import { HttpException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AxiosError } from 'axios';
-import { firstValueFrom } from 'rxjs';
-import { CreateOrderDto } from './dto/create-order.dto';
+
 // This service forwards order requests from API Gateway to Order Service.
 @Injectable()
 export class OrdersProxyService {
@@ -19,64 +17,50 @@ export class OrdersProxyService {
     correlationId: string,
     createOrderDto: CreateOrderDto,
   ) {
-    return this.forwardRequest(
-      'post',
-      '/orders',
-      userId,
+    return forwardHttpRequest({
+      httpService: this.httpService,
+      configService: this.configService,
+      serviceUrlConfigKey: 'ORDER_SERVICE_URL',
+      unavailableMessage: 'Order Service is unavailable',
+      method: 'post',
+      path: '/orders',
       correlationId,
-      createOrderDto,
-    );
+      body: createOrderDto,
+      headers: {
+        'x-user-id': userId,
+      },
+    });
   }
 
   // Forward list orders request.
   findAll(userId: string, correlationId: string) {
-    return this.forwardRequest('get', '/orders', userId, correlationId);
+    return forwardHttpRequest({
+      httpService: this.httpService,
+      configService: this.configService,
+      serviceUrlConfigKey: 'ORDER_SERVICE_URL',
+      unavailableMessage: 'Order Service is unavailable',
+      method: 'get',
+      path: '/orders',
+      correlationId,
+      headers: {
+        'x-user-id': userId,
+      },
+    });
   }
 
   // Forward get one order request.
   findOne(userId: string, correlationId: string, orderId: string) {
-    return this.forwardRequest(
-      'get',
-      `/orders/${orderId}`,
-      userId,
+    return forwardHttpRequest({
+      httpService: this.httpService,
+      configService: this.configService,
+      serviceUrlConfigKey: 'ORDER_SERVICE_URL',
+      unavailableMessage: 'Order Service is unavailable',
+      method: 'get',
+      path: `/orders/${orderId}`,
       correlationId,
-    );
-  }
-
-  // Shared helper for forwarding requests to Order Service.
-  private async forwardRequest(
-    method: 'get' | 'post',
-    path: string,
-    userId: string,
-    correlationId: string,
-    body?: unknown,
-  ) {
-    const orderServiceUrl = this.configService.get<string>('ORDER_SERVICE_URL');
-
-    try {
-      // HttpService returns an RxJS Observable, so firstValueFrom converts it to a Promise.
-      const response = await firstValueFrom(
-        this.httpService.request({
-          method,
-          url: `${orderServiceUrl}${path}`,
-          data: body,
-          headers: {
-            [CORRELATION_ID_HEADER]: correlationId,
-            'x-user-id': userId,
-          },
-        }),
-      );
-
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<any>;
-      if (axiosError.response) {
-        throw new HttpException(
-          axiosError.response.data,
-          axiosError.response.status,
-        );
-      }
-      throw new HttpException('Order Service is unavailable', 503);
-    }
+      headers: {
+        'x-user-id': userId,
+      },
+    });
   }
 }

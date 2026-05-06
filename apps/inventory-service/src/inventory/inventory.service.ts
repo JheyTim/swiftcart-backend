@@ -4,6 +4,8 @@ import {
   InventoryReservedEvent,
   OrderCreatedEvent,
   RabbitMqPublisher,
+  CreateInventoryItemDto,
+  AddStockDto,
 } from '@app/common';
 import {
   ConflictException,
@@ -12,8 +14,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { InventoryItem } from './inventory-item.entity';
 import { StockReservation } from './stock-reservation.entity';
 

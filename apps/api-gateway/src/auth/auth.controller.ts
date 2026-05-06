@@ -1,8 +1,10 @@
-import type { RequestWithCorrelationId } from '@app/common';
+import type {
+  RequestWithCorrelationId,
+  LoginDto,
+  RegisterDto,
+} from '@app/common';
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { AuthProxyService } from './auth-proxy.service';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 
 // This controller exposes public auth endpoints from the API Gateway.
 @Controller('auth')

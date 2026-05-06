@@ -8,10 +8,12 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import type { RequestWithCorrelationId } from '@app/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import type {
+  RequestWithCorrelationId,
+  CreateProductDto,
+  UpdateProductDto,
+} from '@app/common';
+import { JwtAuthGuard } from '@app/common';
 import { ProductsProxyService } from './products-proxy.service';
 
 // This controller exposes product endpoints from the API Gateway.

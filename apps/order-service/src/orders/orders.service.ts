@@ -1,8 +1,12 @@
-import { EventNames, OrderCreatedEvent, RabbitMqPublisher } from '@app/common';
+import {
+  EventNames,
+  OrderCreatedEvent,
+  RabbitMqPublisher,
+  CreateOrderDto,
+} from '@app/common';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from './enums/order-status.enum';
 import { OrderItem } from './order-item.entity';
 import { Order } from './order.entity';

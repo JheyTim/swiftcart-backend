@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
@@ -6,9 +7,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
-// One item inside an order creation request.
 export class CreateOrderItemDto {
   @IsString()
   productId!: string;
@@ -24,7 +23,7 @@ export class CreateOrderItemDto {
   @Min(1)
   quantity!: number;
 }
-// API Gateway validates order requests before forwarding them to Order Service.
+
 export class CreateOrderDto {
   @IsArray()
   @ArrayMinSize(1)

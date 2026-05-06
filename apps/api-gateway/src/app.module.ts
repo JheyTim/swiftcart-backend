@@ -7,8 +7,6 @@ import { HttpModule } from '@nestjs/axios';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthProxyService } from './auth/auth-proxy.service';
 import { JwtStrategy } from './auth/jwt.strategy';
@@ -32,14 +30,12 @@ import { HealthModule } from './health/health.module';
     HealthModule,
   ],
   controllers: [
-    AppController,
     AuthController,
     ProductsController,
     OrdersController,
     InventoryController,
   ],
   providers: [
-    AppService,
     AuthProxyService,
     ProductsProxyService,
     OrdersProxyService,

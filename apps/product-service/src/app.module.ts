@@ -2,10 +2,10 @@ import {
   CorrelationIdMiddleware,
   RequestLoggingMiddleware,
   envValidationSchema,
+  createPostgresTypeOrmModule,
 } from '@app/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { Product } from './products/product.entity';
 import { ProductsModule } from './products/products.module';
 import { HealthModule } from './health/health.module';
@@ -20,22 +20,7 @@ import { HealthModule } from './health/health.module';
     }),
 
     // Connects Product Service to PostgreSQL.
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('POSTGRES_HOST'),
-        port: Number(configService.get<number>('POSTGRES_PORT')),
-        username: configService.get<string>('POSTGRES_USER'),
-        password: configService.get<string>('POSTGRES_PASSWORD'),
-        database: configService.get<string>('POSTGRES_DB'),
-        entities: [Product],
-        // Local learning convenience only.
-        // In production, use TypeORM migrations instead.
-        synchronize: configService.get<string>('NODE_ENV') === 'development',
-      }),
-    }),
+    createPostgresTypeOrmModule([Product]),
 
     // Product feature module.
     ProductsModule,

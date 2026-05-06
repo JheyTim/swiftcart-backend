@@ -1,4 +1,9 @@
-import type { RequestWithCorrelationId } from '@app/common';
+import type {
+  RequestWithCorrelationId,
+  AddStockDto,
+  CreateInventoryItemDto,
+} from '@app/common';
+import { JwtAuthGuard } from '@app/common';
 import {
   Body,
   Controller,
@@ -9,9 +14,6 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AddStockDto } from './dto/add-stock.dto';
-import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { InventoryProxyService } from './inventory-proxy.service';
 
 // This controller exposes inventory management routes from the API Gateway.

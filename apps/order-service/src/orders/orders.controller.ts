@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
-import { CreateOrderDto } from './dto/create-order.dto';
 import { OrdersService } from './orders.service';
-import { CORRELATION_ID_HEADER } from '@app/common';
+import { CORRELATION_ID_HEADER, CreateOrderDto } from '@app/common';
 
 // This controller exposes Order Service HTTP routes.
 // API Gateway calls these routes after validating the user's JWT.
