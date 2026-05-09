@@ -1,0 +1,6 @@
+# k8s/namespace.yaml
+# Namespace isolates all SwiftCart resources from other local cluster resources.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: swiftcart

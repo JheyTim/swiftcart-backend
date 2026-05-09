@@ -1,0 +1,46 @@
+# k8s/configmap.yaml
+# ConfigMap stores non-sensitive configuration shared by services.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftcart-config
+  namespace: swiftcart
+data:
+  NODE_ENV: "production"
+
+  # Service ports.
+  API_GATEWAY_PORT: "3000"
+  AUTH_SERVICE_PORT: "3001"
+  PRODUCT_SERVICE_PORT: "3002"
+  NOTIFICATION_SERVICE_PORT: "3003"
+  ORDER_SERVICE_PORT: "3004"
+  INVENTORY_SERVICE_PORT: "3005"
+  PAYMENT_SERVICE_PORT: "3006"
+  # Internal service URLs use Kubernetes Service names.
+
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  PRODUCT_SERVICE_URL: "http://product-service:3002"
+  ORDER_SERVICE_URL: "http://order-service:3004"
+  INVENTORY_SERVICE_URL: "http://inventory-service:3005"
+  # PostgreSQL service DNS name.
+
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "swiftcart"
+  # Redis service DNS name.
+
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  PRODUCT_CACHE_TTL_SECONDS: "60"
+  
+  # RabbitMQ service DNS name.
+  RABBITMQ_URL: "amqp://swiftcart:swiftcart_password@rabbitmq:5672"
+  RABBITMQ_EXCHANGE: "swiftcart.events"
+  RABBITMQ_DEAD_LETTER_EXCHANGE: "swiftcart.dead-letter"
+  RABBITMQ_RETRY_EXCHANGE: "swiftcart.retry"
+  
+  # JWT expiration time.
+  JWT_EXPIRES_IN: "15m"
+  
+  # Local payment simulation.
+  PAYMENT_SIMULATION_MODE: "always_success"
