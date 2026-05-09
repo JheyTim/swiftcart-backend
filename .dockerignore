@@ -1,0 +1,23 @@
+# Prevent local dependencies from being copied into Docker build context.
+node_modules
+
+# Prevent compiled output from being copied before Docker builds it.
+dist
+
+# Local environment files should not be baked into images.
+.env
+.env.*
+
+# Git metadata is not needed inside Docker images.
+.git
+.gitignore
+
+# Local Docker and Kubernetes state is not needed inside images.
+docker-compose.yml
+k8s
+
+# Logs and editor files.
+npm-debug.log
+.DS_Store
+.vscode
+.idea
