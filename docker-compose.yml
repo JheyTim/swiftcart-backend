@@ -39,9 +39,10 @@ services:
     volumes:
       # Persists Redis data locally.
       - redis_data:/data
+    command: redis-server --requirepass swiftcart_password --appendonly yes
     healthcheck:
-      # Checks whether Redis responds to ping.
-      test: ["CMD", "redis-cli", "ping"]
+      # Checks whether Redis responds to authenticated ping.
+      test: ["CMD", "redis-cli", "-a", "swiftcart_redis_password", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -13,6 +13,7 @@ import { REDIS_CLIENT } from './redis.constants';
         // Create a Redis client using host and port from .env.
         const redis = new Redis({
           host: configService.get<string>('REDIS_HOST'),
+          password: configService.get<string>('REDIS_PASSWORD'),
           port: Number(configService.get<number>('REDIS_PORT')),
         });
 
