@@ -19,8 +19,8 @@ spec:
         - name: redis
           image: redis:7-alpine
           ports:
-            - containerPort: 6379
-              name: redis
+            - name: redis
+              containerPort: 6379
 
           env:
             - name: REDIS_PASSWORD

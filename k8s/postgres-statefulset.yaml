@@ -18,8 +18,8 @@ spec:
         - name: postgres
           image: postgres:16-alpine
           ports:
-            - containerPort: 5432
-              name: postgres
+            - name: postgres
+              containerPort: 5432
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
