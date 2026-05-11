@@ -29,6 +29,7 @@ export function createPostgresTypeOrmOptions(
     entities,
     // Local learning convenience only.
     // In production, use TypeORM migrations instead.
-    synchronize: configService.get<string>('NODE_ENV') === 'development',
+    // synchronize: configService.get<string>('NODE_ENV') === 'development',
+    synchronize: true
   };
 }
