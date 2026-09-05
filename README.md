@@ -1,316 +1,120 @@
 # SwiftCart Backend
 
-SwiftCart Backend is a NestJS microservices monorepo for an e-commerce backend.
-It includes an API Gateway plus domain services for authentication, products,
-inventory, orders, payments, and notifications.
+An event-driven e-commerce backend built as a NestJS monorepo. SwiftCart uses
+an API Gateway for public HTTP traffic and dedicated services for identity,
+catalog, ordering, inventory, payments, and notifications.
 
-It supports:
+> **Project status:** Portfolio and local-development project. Payments and
+> notifications are simulated; they are not integrations with real providers.
 
-- User registration
-- User login
-- JWT authentication
-- Product creation and listing
-- Redis product caching
-- Order creation
-- Inventory reservation
-- Simulated payment processing
-- Notification event logging
-- RabbitMQ-based asynchronous communication
-- Docker Compose local infrastructure
-- Local Kubernetes deployment
+## Contents
 
----
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology stack](#technology-stack)
+- [Services](#services)
+- [Getting started](#getting-started)
+- [Try the checkout flow](#try-the-checkout-flow)
+- [API reference](#api-reference)
+- [Configuration](#configuration)
+- [Local Kubernetes deployment](#local-kubernetes-deployment)
+- [Observability and RabbitMQ](#observability-and-rabbitmq)
+- [Development notes](#development-notes)
 
-## Tech Stack
+## Features
 
-| Area | Technology |
-|---|---|
-| Language | TypeScript |
-| Backend Framework | NestJS |
-| Database | PostgreSQL |
-| Cache | Redis |
-| Message Broker | RabbitMQ |
-| Authentication | JWT, Passport |
-| ORM | TypeORM |
-| Local Infrastructure | Docker Compose |
-| Container Runtime | Docker |
-| Orchestration | Kubernetes |
-| Validation | class-validator, class-transformer, Joi |
-| HTTP Client | Axios via `@nestjs/axios` |
-
----
+- User registration and JWT authentication
+- Product creation, listing, lookup, and updates
+- Cache-aside product reads with Redis
+- User-owned orders with item and price snapshots
+- Transactional inventory reservation and release
+- Configurable payment simulation
+- Event-driven notifications through application logs
+- RabbitMQ retries and dead-letter queues
+- Correlation IDs across HTTP requests and domain events
+- Health endpoints for every service
+- Docker Compose infrastructure and local Kubernetes manifests
 
 ## Architecture
 
-```txt
-Client
-  |
-  | HTTP
-  v
-API Gateway
-  |
-  | HTTP internal calls
-  v
-Auth Service
-Product Service
-Order Service
-Inventory Service
-Payment Service
-Notification Service
-  |
-  | SQL / Cache / Events
-  v
-PostgreSQL
-Redis
-RabbitMQ
+```text
+                         synchronous HTTP
+Client ──────────────▶ API Gateway ─────────────┬─▶ Auth Service
+                                               ├─▶ Product Service ─▶ Redis
+                                               ├─▶ Order Service
+                                               └─▶ Inventory Service
+
+                         asynchronous events
+Order Service ── order.created ──▶ Inventory Service
+                                      │
+                         inventory.reserved / reservation_failed
+                                      │
+                                      ├─▶ Order Service
+                                      └─▶ Payment Service
+                                                │
+                                  payment.succeeded / payment.failed
+                                                │
+                                                ├─▶ Order Service
+                                                ├─▶ Inventory Service
+                                                └─▶ Notification Service
+
+Persistent data: PostgreSQL       Event broker: RabbitMQ
 ```
 
-The API Gateway is the public entry point. Internal services own their own business logic and data.
+The API Gateway is the public entry point. It validates JWTs, attaches a
+correlation ID, and proxies requests to the service that owns the relevant
+domain. RabbitMQ decouples the checkout steps that do not need to finish during
+the original HTTP request.
 
-RabbitMQ is used for asynchronous workflows such as:
+### Checkout lifecycle
 
-```txt
-order.created
-  -> inventory.reserved
-  -> payment.succeeded
-  -> order status PAID
-```
+On a successful checkout:
 
----
+1. The Order Service stores an order as `PENDING` and publishes
+   `order.created`.
+2. The Inventory Service reserves all requested stock in a transaction and
+   publishes `inventory.reserved`.
+3. The Order Service changes the status to `INVENTORY_RESERVED`.
+4. The Payment Service records a simulated payment and publishes
+   `payment.succeeded`.
+5. The Order Service changes the status to `PAID`, while the Inventory Service
+   confirms the reservation.
+6. The Notification Service logs the events it consumes.
+
+If stock is unavailable, `inventory.reservation_failed` moves the order to
+`CANCELLED`. If payment fails, `payment.failed` moves the order to
+`PAYMENT_FAILED` and releases its reserved stock.
+
+## Technology stack
+
+| Area                   | Technology                              |
+| ---------------------- | --------------------------------------- |
+| Language and framework | TypeScript, NestJS                      |
+| Persistence            | PostgreSQL, TypeORM                     |
+| Cache                  | Redis, ioredis                          |
+| Messaging              | RabbitMQ, amqplib                       |
+| Authentication         | JWT, Passport, bcrypt                   |
+| Validation             | class-validator, class-transformer, Joi |
+| Internal HTTP          | Axios through `@nestjs/axios`           |
+| Infrastructure         | Docker, Docker Compose, Kubernetes      |
 
 ## Services
 
-### API Gateway
-
-Public entry point for clients.
-
-Responsibilities:
-
-- Exposes public HTTP routes
-- Validates JWTs
-- Forwards requests to internal services
-- Adds correlation IDs
-- Applies request logging
-
-Default port:
-
-```txt
-3000
-```
-
----
-
-### Auth Service
-
-Owns user identity.
-
-Responsibilities:
-
-- Register users
-- Hash passwords with bcrypt
-- Log users in
-- Issue JWT access tokens
-- Validate authenticated users
-
-Default port:
-
-```txt
-3001
-```
-
-Main table:
-
-```txt
-users
-```
-
----
-
-### Product Service
-
-Owns product catalog data.
-
-Responsibilities:
-
-- Create products
-- List products
-- Get product details
-- Update products
-- Cache product reads in Redis
-- Publish `product.created`
-
-Default port:
-
-```txt
-3002
-```
-
-Main table:
-
-```txt
-products
-```
-
-Redis keys:
-
-```txt
-products:list
-products:detail:<product-id>
-```
-
----
-
-### Notification Service
-
-Consumes events and simulates notifications through logs.
-
-Responsibilities:
-
-- Listen for domain events
-- Log notification messages
-- Help verify event-driven workflows
-
-Default port:
-
-```txt
-3003
-```
-
----
-
-### Order Service
-
-Owns customer orders.
-
-Responsibilities:
-
-- Create orders
-- Store order items
-- Publish `order.created`
-- Update order status after inventory and payment events
-
-Default port:
-
-```txt
-3004
-```
-
-Main tables:
-
-```txt
-orders
-order_items
-```
-
-Order statuses:
-
-```txt
-PENDING
-INVENTORY_RESERVED
-CANCELLED
-PAID
-PAYMENT_FAILED
-```
-
----
-
-### Inventory Service
-
-Owns stock counts and reservations.
-
-Responsibilities:
-
-- Create inventory records
-- Add stock
-- Reserve stock after `order.created`
-- Publish `inventory.reserved`
-- Publish `inventory.reservation_failed`
-- Confirm stock after payment success
-- Release stock after payment failure
-
-Default port:
-
-```txt
-3005
-```
-
-Main tables:
-
-```txt
-inventory_items
-stock_reservations
-```
-
----
-
-### Payment Service
-
-Simulates payment processing.
-
-Responsibilities:
-
-- Consume `inventory.reserved`
-- Create payment records
-- Simulate payment success or failure
-- Publish `payment.succeeded`
-- Publish `payment.failed`
-
-Default port:
-
-```txt
-3006
-```
-
-Main table:
-
-```txt
-payments
-```
-
----
-
-## Event Flow
-
-### Successful Checkout
-
-```txt
-1. Client creates an order.
-2. Order Service stores order as PENDING.
-3. Order Service publishes order.created.
-4. Inventory Service reserves stock.
-5. Inventory Service publishes inventory.reserved.
-6. Order Service updates status to INVENTORY_RESERVED.
-7. Payment Service processes payment.
-8. Payment Service publishes payment.succeeded.
-9. Order Service updates status to PAID.
-10. Inventory Service confirms stock reservation.
-11. Notification Service logs related events.
-```
-
-### Inventory Failure
-
-```txt
-1. Client creates an order.
-2. Order Service stores order as PENDING.
-3. Order Service publishes order.created.
-4. Inventory Service detects insufficient stock.
-5. Inventory Service publishes inventory.reservation_failed.
-6. Order Service updates status to CANCELLED.
-```
-
-### Payment Failure
-
-```txt
-1. Inventory is reserved successfully.
-2. Payment Service simulates failed payment.
-3. Payment Service publishes payment.failed.
-4. Order Service updates status to PAYMENT_FAILED.
-5. Inventory Service releases reserved stock.
-```
-
----
-
-## Project Structure
+| Service              | Port | Responsibility                                           | Primary data                            |
+| -------------------- | ---: | -------------------------------------------------------- | --------------------------------------- |
+| API Gateway          | 3000 | Public routes, authentication, request proxying, logging | —                                       |
+| Auth Service         | 3001 | Registration, login, JWT issuance                        | `users`                                 |
+| Product Service      | 3002 | Product catalog and Redis caching                        | `products`                              |
+| Notification Service | 3003 | Consume and log domain events                            | —                                       |
+| Order Service        | 3004 | Orders, items, and status transitions                    | `orders`, `order_items`                 |
+| Inventory Service    | 3005 | Available stock and reservations                         | `inventory_items`, `stock_reservations` |
+| Payment Service      | 3006 | Simulated payment processing                             | `payments`                              |
+
+Reusable DTOs, event contracts, guards, HTTP helpers, and infrastructure
+modules live in `libs/common/src` and are imported through `@app/common`.
+
+<details>
+<summary>Repository layout</summary>
 
 ```text
 swiftcart-backend/
@@ -318,681 +122,305 @@ swiftcart-backend/
 │   ├── api-gateway/
 │   ├── auth-service/
 │   ├── product-service/
-│   ├── inventory-service/
+│   ├── notification-service/
 │   ├── order-service/
-│   ├── payment-service/
-│   └── notification-service/
+│   ├── inventory-service/
+│   └── payment-service/
+├── libs/common/src/
+│   ├── config/
+│   ├── database/
+│   ├── dto/
+│   ├── events/
+│   ├── guards/
+│   ├── http/
+│   ├── rabbitmq/
+│   └── redis/
 ├── k8s/
-├── libs/
-│   └── common/
-│       └── src/
-│           ├── config/
-│           ├── database/
-│           ├── dto/
-│           ├── events/
-│           ├── guards/
-│           ├── http/
-│           ├── rabbitmq/
-│           └── redis/
-├── .dockerignore
-├── .env.example
-├── .gitignore
 ├── docker-compose.yml
-├── Dockerfile
-├── LICENSE
-├── nest-cli.json
-├── package-lock.json
-├── package.json
-├── README.md
-└── tsconfig.json
+└── Dockerfile
 ```
----
 
-## Shared Common Library
+</details>
 
-Shared code lives in `libs/common/src` and should be imported with
-`@app/common`.
+## Getting started
 
-| Folder      | Purpose                                                                                                    |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `database/` | Shared PostgreSQL/TypeORM setup helpers.                                                                   |
-| `dto/`      | Shared request DTOs used by the gateway and services.                                                      |
-| `events/`   | Domain event names, payload contracts, and message metadata types.                                         |
-| `guards/`   | Shared Nest guards such as `JwtAuthGuard`.                                                                 |
-| `http/`     | Correlation ID middleware, request logging, exception filter, app bootstrap, and proxy forwarding helpers. |
-| `rabbitmq/` | RabbitMQ module, publisher, queue setup, retry/dead-letter helpers, and domain event consumer helper.      |
-| `redis/`    | Shared Redis module and DI token.                                                                          |
+### Prerequisites
 
----
-
-## Prerequisites
-
-- Node.js 20+
+- Node.js 20 or newer
 - npm
-- Docker
-- Docker Compose
-- NestJS CLI
-- kubectl
-- Docker Desktop Kubernetes
+- Docker with Docker Compose
 
----
+Kubernetes deployment additionally requires `kubectl` and a local Kubernetes
+cluster such as Docker Desktop Kubernetes.
 
-## Getting Started
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Create a local environment file:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Start local infrastructure:
-
-   ```bash
-   npm run infra:up
-   ```
-
-4. Start services in separate terminals as needed:
-
-   ```bash
-   npm run start:api-gateway:dev
-   npm run start:auth-service:dev
-   npm run start:product-service:dev
-   npm run start:inventory-service:dev
-   npm run start:order-service:dev
-   npm run start:payment-service:dev
-   npm run start:notification-service:dev
-   ```
-
-5. Open the API Gateway at:
-
-   ```text
-   http://localhost:3000
-   ```
-
----
-
-## API Testing Flow
-
-### 1. Register User
+### Install and run
 
 ```bash
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -H "x-correlation-id: register-1" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123",
-    "fullName": "Test User"
-  }'
+# Install dependencies and create local configuration.
+npm install
+cp .env.example .env
+
+# Start PostgreSQL, Redis, and RabbitMQ.
+npm run infra:up
 ```
 
----
-
-### 2. Login
+Start each application in its own terminal:
 
 ```bash
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -H "x-correlation-id: login-1" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123"
-  }'
+npm run start:api-gateway:dev
+npm run start:auth-service:dev
+npm run start:product-service:dev
+npm run start:notification-service:dev
+npm run start:order-service:dev
+npm run start:inventory-service:dev
+npm run start:payment-service:dev
 ```
 
-Store the returned token:
-
-```bash
-TOKEN="PASTE_ACCESS_TOKEN_HERE"
-```
-
----
-
-### 3. Create Product
-
-```bash
-curl -X POST http://localhost:3000/products \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: product-1" \
-  -d '{
-    "name": "Mechanical Keyboard",
-    "description": "A compact mechanical keyboard for developers",
-    "priceCents": 499900,
-    "isActive": true
-  }'
-```
-
-Store the product ID:
-
-```bash
-PRODUCT_ID="PASTE_PRODUCT_ID_HERE"
-```
-
----
-
-### 4. List Products
-
-```bash
-curl http://localhost:3000/products \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: products-list-1"
-```
-
----
-
-### 5. Seed Inventory
-
-```bash
-curl -X POST http://localhost:3000/inventory/items \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: inventory-1" \
-  -d '{
-    "productId": "'"$PRODUCT_ID"'",
-    "availableQuantity": 10
-  }'
-```
-
----
-
-### 6. Create Order
-
-```bash
-curl -X POST http://localhost:3000/orders \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: order-1" \
-  -d '{
-    "items": [
-      {
-        "productId": "'"$PRODUCT_ID"'",
-        "productName": "Mechanical Keyboard",
-        "unitPriceCents": 499900,
-        "quantity": 2
-      }
-    ]
-  }'
-```
-
-Store the order ID:
-
-```bash
-ORDER_ID="PASTE_ORDER_ID_HERE"
-```
-
----
-
-### 7. Check Order Status
-
-Because this project uses asynchronous events, the order status may take a moment to update.
-
-```bash
-curl http://localhost:3000/orders/$ORDER_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: order-status-1"
-```
-
-Expected successful final status:
-
-```txt
-PAID
-```
-
-Expected payment failure final status:
-
-```txt
-PAYMENT_FAILED
-```
-
-Expected inventory failure final status:
-
-```txt
-CANCELLED
-```
-
----
-
-## RabbitMQ Dashboard
-
-Open:
-
-```txt
-http://localhost:15672
-```
-
-Credentials:
-
-```txt
-Username: swiftcart
-Password: swiftcart_password
-```
-
-Useful sections:
-
-```txt
-Exchanges
-Queues
-Bindings
-```
-
-Expected exchanges:
-
-```txt
-swiftcart.events
-swiftcart.retry
-swiftcart.dead-letter
-```
-
-Expected queues include:
-
-```txt
-notification.product-created
-notification.order-created
-inventory.order-created
-payment.inventory-reserved
-order.inventory-reserved
-order.inventory-reservation-failed
-order.payment-succeeded
-order.payment-failed
-inventory.payment-succeeded
-inventory.payment-failed
-```
-
----
-
-## Kubernetes Local Deployment
-
-### Build Docker Images
-
-```bash
-docker build --build-arg APP_NAME=api-gateway -t swiftcart/api-gateway:local .
-docker build --build-arg APP_NAME=auth-service -t swiftcart/auth-service:local .
-docker build --build-arg APP_NAME=product-service -t swiftcart/product-service:local .
-docker build --build-arg APP_NAME=order-service -t swiftcart/order-service:local .
-docker build --build-arg APP_NAME=inventory-service -t swiftcart/inventory-service:local .
-docker build --build-arg APP_NAME=payment-service -t swiftcart/payment-service:local .
-docker build --build-arg APP_NAME=notification-service -t swiftcart/notification-service:local .
-```
-
-Because the Kubernetes manifests use `imagePullPolicy: Never`, the images must exist inside the local Kubernetes cluster.
-
-For Docker Desktop Kubernetes, locally built Docker images are usually available directly.
-
----
-
-### Apply Kubernetes Manifests
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/postgres-service.yaml
-kubectl apply -f k8s/postgres-statefulset.yaml
-kubectl apply -f k8s/redis-service.yaml
-kubectl apply -f k8s/redis-statefulset.yaml
-kubectl apply -f k8s/rabbitmq-service.yaml
-kubectl apply -f k8s/rabbitmq-statefulset.yaml
-
-kubectl apply -f k8s/api-gateway-service.yaml
-kubectl apply -f k8s/api-gateway-deployment.yaml
-kubectl apply -f k8s/auth-service.yaml
-kubectl apply -f k8s/auth-service-deployment.yaml
-kubectl apply -f k8s/product-service.yaml
-kubectl apply -f k8s/product-service-deployment.yaml
-kubectl apply -f k8s/order-service.yaml
-kubectl apply -f k8s/order-service-deployment.yaml
-kubectl apply -f k8s/inventory-service.yaml
-kubectl apply -f k8s/inventory-service-deployment.yaml
-kubectl apply -f k8s/payment-service.yaml
-kubectl apply -f k8s/payment-service-deployment.yaml
-kubectl apply -f k8s/notification-service.yaml
-kubectl apply -f k8s/notification-service-deployment.yaml
-```
-
-Or apply everything:
-
-```bash
-kubectl apply -f k8s/
-```
-
-For a fresh setup, applying the files in order is easier to debug. Once everything is stable, `kubectl apply -f k8s/` is fine.
-
-Check status:
-
-```bash
-kubectl get all -n swiftcart
-kubectl get pods -n swiftcart
-kubectl get svc -n swiftcart
-kubectl get endpoints -n swiftcart
-kubectl get pvc -n swiftcart
-```
-
----
-
-### Access API Gateway in Kubernetes
-
-Check the API Gateway LoadBalancer service:
-
-```bash
-kubectl get svc api-gateway -n swiftcart
-```
-
-If `EXTERNAL-IP` is `localhost`, access the API Gateway at `http://localhost:3000`.
-
-Expected example:
-
-```txt
-NAME          TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)
-api-gateway   LoadBalancer   10.x.x.x       localhost     3000:xxxxx/TCP
-```
-
-Test:
+The public API is available at `http://localhost:3000`. Verify it with:
 
 ```bash
 curl http://localhost:3000/health/live
 curl http://localhost:3000/health/ready
 ```
 
----
+Stop the infrastructure when finished:
 
-### Internal Kubernetes Service Names
+```bash
+npm run infra:down
+```
 
-Inside the `swiftcart` namespace, services communicate using these names:
+## Try the checkout flow
 
-| Component | Internal Address |
-|---|---|
-| PostgreSQL | `postgres:5432` |
-| Redis | `redis:6379` |
-| RabbitMQ | `rabbitmq:5672` |
-| API Gateway | `http://api-gateway:3000` |
-| Auth Service | `http://auth-service:3001` |
-| Product Service | `http://product-service:3002` |
-| Notification Service | `http://notification-service:3003` |
-| Order Service | `http://order-service:3004` |
-| Inventory Service | `http://inventory-service:3005` |
-| Payment Service | `http://payment-service:3006` |
+The examples below use only the API Gateway.
 
----
+### 1. Register and log in
 
-### Access RabbitMQ Dashboard in Kubernetes
+```bash
+curl -X POST http://localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "test@example.com",
+    "password": "password123",
+    "fullName": "Test User"
+  }'
+
+curl -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "test@example.com",
+    "password": "password123"
+  }'
+```
+
+Copy the returned access token:
+
+```bash
+TOKEN='PASTE_ACCESS_TOKEN_HERE'
+```
+
+### 2. Create a product and inventory
+
+Prices are represented in the smallest currency unit. For example, `499900`
+means 4,999.00 in a two-decimal currency.
+
+```bash
+curl -X POST http://localhost:3000/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Mechanical Keyboard",
+    "description": "A compact mechanical keyboard",
+    "priceCents": 499900,
+    "isActive": true
+  }'
+
+PRODUCT_ID='PASTE_PRODUCT_ID_HERE'
+
+curl -X POST http://localhost:3000/inventory/items \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"productId\": \"$PRODUCT_ID\",
+    \"availableQuantity\": 10
+  }"
+```
+
+### 3. Create and inspect an order
+
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"items\": [{
+      \"productId\": \"$PRODUCT_ID\",
+      \"productName\": \"Mechanical Keyboard\",
+      \"unitPriceCents\": 499900,
+      \"quantity\": 2
+    }]
+  }"
+
+ORDER_ID='PASTE_ORDER_ID_HERE'
+
+curl http://localhost:3000/orders/$ORDER_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Checkout is asynchronous, so the first response may show `PENDING` or
+`INVENTORY_RESERVED`. Query the order again to see its final status: `PAID`,
+`PAYMENT_FAILED`, or `CANCELLED`.
+
+Set `PAYMENT_SIMULATION_MODE` in `.env` to `always_success`, `always_fail`, or
+`random` when testing a specific outcome.
+
+## API reference
+
+Clients should use the API Gateway rather than calling domain services
+directly.
+
+| Method  | Gateway path                               | Auth   | Description                          |
+| ------- | ------------------------------------------ | ------ | ------------------------------------ |
+| `GET`   | `/health`, `/health/live`, `/health/ready` | Public | Gateway health checks                |
+| `POST`  | `/auth/register`                           | Public | Create a user                        |
+| `POST`  | `/auth/login`                              | Public | Return a JWT access token            |
+| `POST`  | `/products`                                | JWT    | Create a product                     |
+| `GET`   | `/products`                                | JWT    | List products                        |
+| `GET`   | `/products/:id`                            | JWT    | Get a product                        |
+| `PATCH` | `/products/:id`                            | JWT    | Update a product                     |
+| `POST`  | `/inventory/items`                         | JWT    | Create product inventory             |
+| `GET`   | `/inventory/items`                         | JWT    | List inventory                       |
+| `GET`   | `/inventory/items/:productId`              | JWT    | Get product inventory                |
+| `PATCH` | `/inventory/items/:productId/add-stock`    | JWT    | Add stock                            |
+| `POST`  | `/orders`                                  | JWT    | Create an order                      |
+| `GET`   | `/orders`                                  | JWT    | List the authenticated user's orders |
+| `GET`   | `/orders/:id`                              | JWT    | Get one owned order                  |
+
+Every domain service also exposes `/health/live` and `/health/ready`. Internal
+HTTP routes intentionally remain behind the API Gateway in the application
+architecture, even though their ports are accessible during local development.
+
+## Configuration
+
+Copy `.env.example` to `.env`; the example file is the source of truth for
+local defaults and descriptions.
+
+| Group           | Important variables                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Service routing | `*_SERVICE_PORT`, `*_SERVICE_URL`                                                               |
+| PostgreSQL      | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`           |
+| Redis           | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `PRODUCT_CACHE_TTL_SECONDS`                       |
+| Authentication  | `JWT_SECRET`, `JWT_EXPIRES_IN`                                                                  |
+| RabbitMQ        | `RABBITMQ_URL`, `RABBITMQ_EXCHANGE`, `RABBITMQ_RETRY_EXCHANGE`, `RABBITMQ_DEAD_LETTER_EXCHANGE` |
+| Payments        | `PAYMENT_SIMULATION_MODE`                                                                       |
+
+Configuration is validated with Joi when each application starts. Development
+uses TypeORM schema synchronization for convenience; production deployments
+should use migrations instead.
+
+## Local Kubernetes deployment
+
+### Build images
+
+```bash
+for app in api-gateway auth-service product-service notification-service \
+  order-service inventory-service payment-service; do
+  docker build --build-arg APP_NAME="$app" -t "swiftcart/$app:local" .
+done
+```
+
+The manifests use `imagePullPolicy: Never`, so these images must be available
+to the local cluster's container runtime.
+
+### Deploy and verify
+
+```bash
+kubectl apply -f k8s/
+kubectl get pods -n swiftcart
+kubectl get svc -n swiftcart
+kubectl get pvc -n swiftcart
+```
+
+With Docker Desktop Kubernetes, the API Gateway load balancer is typically
+available at `http://localhost:3000`. If it is not, inspect the service:
+
+```bash
+kubectl get svc api-gateway -n swiftcart
+```
+
+Useful lifecycle and debugging commands:
+
+```bash
+# Follow logs for one component.
+kubectl logs -n swiftcart -l app=api-gateway --follow
+
+# Restart applications after rebuilding images.
+kubectl rollout restart deployment -n swiftcart
+
+# Stop and restart workloads without intentionally deleting persistent data.
+kubectl scale deployment --all -n swiftcart --replicas=0
+kubectl scale statefulset --all -n swiftcart --replicas=0
+kubectl scale statefulset --all -n swiftcart --replicas=1
+kubectl scale deployment --all -n swiftcart --replicas=1
+
+# Remove the complete local deployment, including namespace-scoped claims.
+kubectl delete namespace swiftcart
+```
+
+## Observability and RabbitMQ
+
+The gateway accepts an optional `x-correlation-id` header. If it is omitted, a
+UUID is generated. The ID is returned in the response and propagated through
+internal HTTP calls and event metadata.
+
+```bash
+curl http://localhost:3000/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'x-correlation-id: local-debug-123'
+```
+
+RabbitMQ Management is available locally at <http://localhost:15672> with the
+credentials from `docker-compose.yml` (`swiftcart` / `swiftcart_password`). The
+main exchanges are:
+
+- `swiftcart.events`
+- `swiftcart.retry`
+- `swiftcart.dead-letter`
+
+Consumers acknowledge messages only after successful handling. Failed messages
+are delayed through retry queues and eventually routed to a dead-letter queue.
+
+For Kubernetes, forward the management port first:
 
 ```bash
 kubectl port-forward -n swiftcart service/rabbitmq 15672:15672
 ```
 
-Keep this command running while using the dashboard.
-
-Open:
-
-```txt
-http://localhost:15672
-```
-
-Credentials come from `k8s/secret.yaml`.
-
----
-
-### Restart App Deployments After Rebuild
-
-Rebuild the Docker images before restarting deployments.
-
-```bash
-kubectl rollout restart deployment -n swiftcart
-```
-
----
-
-### Stop Workloads Without Deleting Data
-
-```bash
-kubectl scale deployment --all -n swiftcart --replicas=0
-kubectl scale statefulset --all -n swiftcart --replicas=0
-```
-
----
-
-### Start Workloads Again
-
-```bash
-kubectl scale statefulset --all -n swiftcart --replicas=1
-kubectl scale deployment --all -n swiftcart --replicas=1
-```
-
----
-
-### Delete Kubernetes Resources
-
-```bash
-kubectl delete namespace swiftcart
-```
-
-This removes all resources in the namespace, including pods, services, deployments, statefulsets, configmaps, secrets, and persistent volume claims.
-
----
-
-### Kubernetes Debugging
-
-Replace `<service-name>` with a service label such as `api-gateway`, `auth-service`, or `product-service`.
-
-```bash
-kubectl logs -n swiftcart -l app=<service-name>
-```
-
-Check pods:
-
-```bash
-kubectl get pods -n swiftcart
-```
-
-Check service endpoints:
-
-```bash
-kubectl get endpoints -n swiftcart
-```
-
-View API Gateway logs:
-
-```bash
-kubectl logs -n swiftcart -l app=api-gateway
-```
-
-Follow API Gateway logs:
-
-```bash
-kubectl logs -n swiftcart -l app=api-gateway --follow
-```
-
-View logs for a specific service:
-
-```bash
-kubectl logs -n swiftcart -l app=auth-service
-kubectl logs -n swiftcart -l app=product-service
-kubectl logs -n swiftcart -l app=order-service
-```
-
-Describe a failing pod:
-
-```bash
-kubectl describe pod -n swiftcart -l app=api-gateway
-```
-
-Check previous logs after a restart:
-
-```bash
-kubectl logs -n swiftcart -l app=api-gateway --previous
-```
-
-
----
-
-## Correlation IDs
-
-Every request can include:
-
-```txt
-x-correlation-id
-```
-
-Example:
-
-```bash
-curl http://localhost:3000/products \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-correlation-id: local-debug-123"
-```
-
-Expected behavior:
-
-```txt
-API Gateway logs include local-debug-123
-Internal service logs include local-debug-123
-RabbitMQ event metadata may include local-debug-123
-```
-
----
-
-## HTTP Endpoints
-
-Most client traffic should go through the API Gateway at
-`http://localhost:3000`. Internal service endpoints are listed for local
-debugging and service-to-service context.
-
-### API Gateway (`localhost:3000`)
-
-| Method  | Path                                    | Auth   | Description                                           |
-| ------- | --------------------------------------- | ------ | ----------------------------------------------------- |
-| `GET`   | `/health`                               | Public | Basic API Gateway health response.                    |
-| `GET`   | `/health/live`                          | Public | Liveness check.                                       |
-| `GET`   | `/health/ready`                         | Public | Readiness check.                                      |
-| `POST`  | `/auth/register`                        | Public | Register a user account.                              |
-| `POST`  | `/auth/login`                           | Public | Log in and receive a JWT.                             |
-| `POST`  | `/products`                             | JWT    | Create a product.                                     |
-| `GET`   | `/products`                             | JWT    | List products.                                        |
-| `GET`   | `/products/:id`                         | JWT    | Get one product by ID.                                |
-| `PATCH` | `/products/:id`                         | JWT    | Update one product by ID.                             |
-| `POST`  | `/inventory/items`                      | JWT    | Create an inventory item for a product.               |
-| `GET`   | `/inventory/items`                      | JWT    | List inventory items.                                 |
-| `GET`   | `/inventory/items/:productId`           | JWT    | Get inventory by product ID.                          |
-| `PATCH` | `/inventory/items/:productId/add-stock` | JWT    | Add stock to a product inventory row.                 |
-| `POST`  | `/orders`                               | JWT    | Create an order for the authenticated user.           |
-| `GET`   | `/orders`                               | JWT    | List orders for the authenticated user.               |
-| `GET`   | `/orders/:id`                           | JWT    | Get one order for the authenticated user.             |
-
-### Auth Service (`localhost:3001`)
-
-| Method | Path             | Auth   | Description                           |
-| ------ | ---------------- | ------ | ------------------------------------- |
-| `GET`  | `/health/live`   | Public | Liveness check.                       |
-| `GET`  | `/health/ready`  | Public | Readiness check.                      |
-| `POST` | `/auth/register` | Public | Register a user account.              |
-| `POST` | `/auth/login`    | Public | Log in and receive a JWT.             |
-| `GET`  | `/auth/me`       | JWT    | Return the authenticated JWT payload. |
-
-### Product Service (`localhost:3002`)
-
-| Method  | Path            | Auth     | Description                                              |
-| ------- | --------------- | -------- | -------------------------------------------------------- |
-| `GET`   | `/health/live`  | Public   | Liveness check.                                          |
-| `GET`   | `/health/ready` | Public   | Readiness check.                                         |
-| `POST`  | `/products`     | Internal | Create a product and publish `product.created`.          |
-| `GET`   | `/products`     | Internal | List products, using Redis cache when available.         |
-| `GET`   | `/products/:id` | Internal | Get one product by ID, using Redis cache when available. |
-| `PATCH` | `/products/:id` | Internal | Update one product and invalidate product caches.        |
-
-### Inventory Service (`localhost:3005`)
-
-| Method  | Path                                    | Auth     | Description                             |
-| ------- | --------------------------------------- | -------- | --------------------------------------- |
-| `GET`   | `/health/live`                          | Public   | Liveness check.                         |
-| `GET`   | `/health/ready`                         | Public   | Readiness check.                        |
-| `POST`  | `/inventory/items`                      | Internal | Create an inventory item for a product. |
-| `GET`   | `/inventory/items`                      | Internal | List inventory items.                   |
-| `GET`   | `/inventory/items/:productId`           | Internal | Get inventory by product ID.            |
-| `PATCH` | `/inventory/items/:productId/add-stock` | Internal | Add stock to a product inventory row.   |
-
-### Order Service (`localhost:3004`)
-
-| Method | Path            | Auth             | Description                                  |
-| ------ | --------------- | ---------------- | -------------------------------------------- |
-| `GET`  | `/health/live`  | Public           | Liveness check.                              |
-| `GET`  | `/health/ready` | Public           | Readiness check.                             |
-| `POST` | `/orders`       | Internal headers | Create an order and publish `order.created`. |
-| `GET`  | `/orders`       | Internal headers | List orders for the forwarded user ID.       |
-| `GET`  | `/orders/:id`   | Internal headers | Get one order for the forwarded user ID.     |
-
-Order Service expects API Gateway to forward `x-user-id` and `x-correlation-id`
-headers.
-
-### Payment Service (`localhost:3006`)
-
-| Method | Path            | Auth           | Description                                          |
-| ------ | --------------- | -------------- | ---------------------------------------------------- |
-| `GET`  | `/health/live`  | Public         | Liveness check.                                      |
-| `GET`  | `/health/ready` | Public         | Readiness check.                                     |
-| `GET`  | `/payments`     | Internal/debug | List payment records for local event-flow debugging. |
-
-### Notification Service (`localhost:3003`)
-
-| Method | Path            | Auth   | Description      |
-| ------ | --------------- | ------ | ---------------- |
-| `GET`  | `/health/live`  | Public | Liveness check.  |
-| `GET`  | `/health/ready` | Public | Readiness check. |
-
-Notification Service primarily consumes RabbitMQ events and does not expose
-domain HTTP routes.
-
----
-
-## Useful Scripts
-
-| Command                                  | Description                                     |
-| ---------------------------------------- | ----------------------------------------------- |
-| `npm run infra:up`                       | Start PostgreSQL, Redis, and RabbitMQ.          |
-| `npm run infra:down`                     | Stop local infrastructure.                      |
-| `npm run infra:logs`                     | Follow infrastructure logs.                     |
-| `npm run infra:ps`                       | Show infrastructure container status.           |
-| `npm run start:api-gateway:dev`          | Start API Gateway in watch mode.                |
-| `npm run start:auth-service:dev`         | Start Auth Service in watch mode.               |
-| `npm run start:product-service:dev`      | Start Product Service in watch mode.            |
-| `npm run start:inventory-service:dev`    | Start Inventory Service in watch mode.          |
-| `npm run start:order-service:dev`        | Start Order Service in watch mode.              |
-| `npm run start:payment-service:dev`      | Start Payment Service in watch mode.            |
-| `npm run start:notification-service:dev` | Start Notification Service in watch mode.       |
-| `npm run format`                         | Format TypeScript files in `apps/` and `libs/`. |
-
----
-
-## Environment Variables
-
-Use `.env.example` as the source of truth for local values. Key groups include:
-
-- Service ports and internal URLs
-- PostgreSQL connection settings
-- Redis connection settings and product cache TTL
-- JWT secret and expiry
-- RabbitMQ connection string and exchange names
-- Payment simulation mode
-
----
-
-## Development Notes
-
-- Keep reusable cross-service logic in `libs/common/src`.
-- Only create shared folders when there is real duplication or cross-service
-  reuse.
-- Keep service-specific business logic inside the owning app.
-- Prefer importing shared contracts and helpers from `@app/common`.
-- `NODE_ENV=development` enables TypeORM `synchronize` for local learning
-  convenience. Use migrations instead for production.
-
---- 
+## Development notes
+
+### Useful scripts
+
+| Command                       | Description                                 |
+| ----------------------------- | ------------------------------------------- |
+| `npm run infra:up`            | Start PostgreSQL, Redis, and RabbitMQ       |
+| `npm run infra:down`          | Stop local infrastructure                   |
+| `npm run infra:logs`          | Follow infrastructure logs                  |
+| `npm run infra:ps`            | Show infrastructure status                  |
+| `npm run start:<service>:dev` | Start a named service in watch mode         |
+| `npm run format`              | Format TypeScript under `apps/` and `libs/` |
+| `npm test`                    | Run Jest tests                              |
+
+### Current scope and production improvements
+
+This repository demonstrates service boundaries and event-driven workflows; it
+does not claim production readiness. Important next steps include:
+
+- transactional outbox publishing for database and event consistency;
+- explicit consumer idempotency and unique event identifiers;
+- row locking or atomic updates for concurrent stock reservations;
+- authoritative server-side catalog pricing during order creation;
+- a real payment provider with idempotency keys and verified webhooks;
+- database migrations, secrets management, metrics, tracing, and broader tests.
 
 ## License
-This project is licensed under the [MIT License](LICENSE).
+
+Licensed under the [MIT License](LICENSE).
